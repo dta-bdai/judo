@@ -1,0 +1,88 @@
+<mujoco model="crowd_barrier">
+<!-- Copyright (c) 2025 Boston Dynamics AI Institute LLC. All rights reserved. -->
+  <body name="crowd_barrier" pos="0 0 0">
+    <joint name="crowd_barrier_joint" type="free"/>
+
+    <!-- Total mass: 35 lbs = 15.876 kg -->
+    <!-- Center of mass at center of panel, approximately 0.5m height -->
+    <!-- Wide base makes it stable, but relatively light for its size -->
+    <inertial pos="0 0 0.5" mass="15.876" diaginertia="3.5 8.0 5.0"/>
+
+    <!-- Main horizontal panel (7' x ~40" x ~2" thick double wall) -->
+    <!-- 2.134m L x 1.0033m H x 0.05m thick -->
+    <geom name="crowd_barrier_panel_collision"
+          type="box"
+          size="1.067 0.025 0.50165"
+          pos="0 0 0.50165"
+          rgba="1.0 0.4 0.0 1.0"
+          class="collision"/>
+    <geom name="crowd_barrier_panel_visual"
+          type="box"
+          size="1.067 0.025 0.50165"
+          pos="0 0 0.50165"
+          rgba="1.0 0.4 0.0 1.0"
+          class="visual"/>
+
+    <!-- Left leg (steel tube, angled outward) -->
+    <!-- Approximate as cylinder, ~36" long, 1.5" diameter -->
+    <!-- Positioned at angle from top to base -->
+    <geom name="crowd_barrier_left_leg_collision"
+          type="cylinder"
+          size="0.019 0.4572"
+          fromto="-0.8 0 0.9 -1.0 0 0.05"
+          rgba="0.15 0.15 0.15 1.0"
+          class="collision"/>
+    <geom name="crowd_barrier_left_leg_visual"
+          type="cylinder"
+          size="0.019 0.4572"
+          fromto="-0.8 0 0.9 -1.0 0 0.05"
+          rgba="0.15 0.15 0.15 1.0"
+          class="visual"/>
+
+    <!-- Right leg (steel tube, angled outward) -->
+    <geom name="crowd_barrier_right_leg_collision"
+          type="cylinder"
+          size="0.019 0.4572"
+          fromto="0.8 0 0.9 1.0 0 0.05"
+          rgba="0.15 0.15 0.15 1.0"
+          class="collision"/>
+    <geom name="crowd_barrier_right_leg_visual"
+          type="cylinder"
+          size="0.019 0.4572"
+          fromto="0.8 0 0.9 1.0 0 0.05"
+          rgba="0.15 0.15 0.15 1.0"
+          class="visual"/>
+
+    <!-- Left foot (steel base plate, ~12" x 4" x 0.5", rotated 90° from panel) -->
+    <!-- Box dimensions: width perpendicular to panel, depth parallel to panel, height vertical -->
+    <geom name="crowd_barrier_left_foot_collision"
+          type="box"
+          size="0.0508 0.1524 0.00635"
+          pos="-1.0 0 0.00635"
+          rgba="0.15 0.15 0.15 1.0"
+          class="collision"/>
+    <geom name="crowd_barrier_left_foot_visual"
+          type="box"
+          size="0.0508 0.1524 0.00635"
+          pos="-1.0 0 0.00635"
+          rgba="0.15 0.15 0.15 1.0"
+          class="visual"/>
+
+    <!-- Right foot (steel base plate, rotated 90° from panel) -->
+    <geom name="crowd_barrier_right_foot_collision"
+          type="box"
+          size="0.0508 0.1524 0.00635"
+          pos="1.0 0 0.00635"
+          rgba="0.15 0.15 0.15 1.0"
+          class="collision"/>
+    <geom name="crowd_barrier_right_foot_visual"
+          type="box"
+          size="0.0508 0.1524 0.00635"
+          pos="1.0 0 0.00635"
+          rgba="0.15 0.15 0.15 1.0"
+          class="visual"/>
+
+    <site name="trace_crowd_barrier" pos="0 0 0" size="0.01"/>
+    <site name="site_object" pos="0 0 0.5" size="0.01"/>
+  </body>
+</mujoco>
