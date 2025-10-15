@@ -1,7 +1,17 @@
 import mujoco
 from judo import MODEL_PATH
 
-chair_path = "/Users/johnzhang/Documents/research/judo-private/judo/models/xml/spot_components/spot_yellow_chair_ramp.xml"
-chair_model = mujoco.MjModel.from_xml_path(chair_path)
-chair_data = mujoco.MjData(chair_model)
+model_path = MODEL_PATH / "xml/spot_components/spot_trafffic_cone.xml"
+model = mujoco.MjModel.from_xml_path(str(model_path))
+data = mujoco.MjData(model)
 
+print(model)
+print(data)
+
+import matplotlib.pyplot as plt
+# visualize the model
+renderer = mujoco.Renderer(model)
+renderer.update_scene(data)
+rgb = renderer.render()
+plt.imshow(rgb)
+plt.show()
