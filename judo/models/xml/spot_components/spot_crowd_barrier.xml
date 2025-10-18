@@ -25,5 +25,11 @@
     <framepos name="trace_body" objtype="site" objname="site_body"/>
     <framepos name="trace_fngr_site" objtype="site" objname="site_arm_link_fngr"/>
     <framepos name="trace_cone" objtype="site" objname="trace_crowd_barrier"/>
+
+    <!-- Sensors for gripper to leg distance -->
+    <framepos name="sensor_gripper_to_left_leg_lower" objtype="site" objname="site_arm_link_fngr" reftype="site" refname="site_left_leg_lower"/>
+    <framepos name="sensor_gripper_to_right_leg_lower" objtype="site" objname="site_arm_link_fngr" reftype="site" refname="site_right_leg_lower"/>
+    <framepos name="sensor_gripper_to_left_leg_mid" objtype="site" objname="site_arm_link_fngr" reftype="site" refname="site_left_leg_mid"/>
+    <framepos name="sensor_gripper_to_right_leg_mid" objtype="site" objname="site_arm_link_fngr" reftype="site" refname="site_right_leg_mid"/>
   </sensor>
 </mujoco>

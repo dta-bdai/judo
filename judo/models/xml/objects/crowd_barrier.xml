@@ -82,7 +82,14 @@
           rgba="0.15 0.15 0.15 1.0"
           class="visual"/>
 
+    <!-- Sites for tracking and sensing -->
     <site name="trace_crowd_barrier" pos="0 0 0" size="0.01"/>
     <site name="site_object" pos="0 0 0.5" size="0.01"/>
+
+    <!-- Sites at legs for gripper targeting -->
+    <site name="site_left_leg_lower" pos="-1.0 0 0.15" size="0.02"/>
+    <site name="site_right_leg_lower" pos="1.0 0 0.15" size="0.02"/>
+    <site name="site_left_leg_mid" pos="-0.9 0 0.5" size="0.02"/>
+    <site name="site_right_leg_mid" pos="0.9 0 0.5" size="0.02"/>
   </body>
 </mujoco>
