@@ -21,6 +21,7 @@ RESET_OBJECT_POSE = np.array([3, 0, 0.275, 1, 0, 0, 0])
 RADIUS_MIN = 1.0
 RADIUS_MAX = 1.5
 USE_LEGS = True
+USE_GRIPPER = True
 
 HARDWARE_FENCE_X = (-2.0, 3.0)
 HARDWARE_FENCE_Y = (-3.0, 2.5)
@@ -44,13 +45,14 @@ class SpotCrowdBarrierConfig(SpotBaseConfig):
     w_object_velocity: float = 64.0
     position_tolerance: float = 0.2
     orientation_tolerance: float = 0.1
+    w_gripper_to_leg: float = 15.0  # Reward for gripper getting close to barrier legs
 
 
 class SpotCrowdBarrier(SpotBase[SpotCrowdBarrierConfig]):
     """Task getting Spot to move a box to a desired goal location."""
 
     def __init__(self, model_path: str = XML_PATH) -> None:
-        super().__init__(model_path=model_path, use_legs=USE_LEGS)
+        super().__init__(model_path=model_path, use_legs=USE_LEGS, use_gripper=USE_GRIPPER)
 
         self.body_pose_idx = get_pos_indices(self.model, "base")
         self.object_pose_idx = get_pos_indices(self.model, ["crowd_barrier_joint"])
@@ -58,6 +60,12 @@ class SpotCrowdBarrier(SpotBase[SpotCrowdBarrierConfig]):
         self.object_y_axis_idx = get_sensor_indices(self.model, "object_y_axis")
         self.object_z_axis_idx = get_sensor_indices(self.model, "object_z_axis")
         self.end_effector_to_object_idx = get_sensor_indices(self.model, "sensor_arm_link_fngr")
+
+        # Sensors for gripper to leg distances
+        self.gripper_to_left_leg_lower_idx = get_sensor_indices(self.model, "sensor_gripper_to_left_leg_lower")
+        self.gripper_to_right_leg_lower_idx = get_sensor_indices(self.model, "sensor_gripper_to_right_leg_lower")
+        self.gripper_to_left_leg_mid_idx = get_sensor_indices(self.model, "sensor_gripper_to_left_leg_mid")
+        self.gripper_to_right_leg_mid_idx = get_sensor_indices(self.model, "sensor_gripper_to_right_leg_mid")
 
 
     def reward(
@@ -122,6 +130,29 @@ class SpotCrowdBarrier(SpotBase[SpotCrowdBarrierConfig]):
         # Compute a velocity penalty to prefer small velocity commands.
         controls_reward = -config.w_controls * np.linalg.norm(controls[..., :3], axis=-1).mean(-1)
 
+        # Heuristic reward: encourage gripper to get close to barrier legs to push
+        # Get distances from gripper to all leg sites
+        gripper_to_left_leg_lower = sensors[..., self.gripper_to_left_leg_lower_idx]
+        gripper_to_right_leg_lower = sensors[..., self.gripper_to_right_leg_lower_idx]
+        gripper_to_left_leg_mid = sensors[..., self.gripper_to_left_leg_mid_idx]
+        gripper_to_right_leg_mid = sensors[..., self.gripper_to_right_leg_mid_idx]
+
+        # Compute distances
+        dist_to_left_leg_lower = np.linalg.norm(gripper_to_left_leg_lower, axis=-1)
+        dist_to_right_leg_lower = np.linalg.norm(gripper_to_right_leg_lower, axis=-1)
+        dist_to_left_leg_mid = np.linalg.norm(gripper_to_left_leg_mid, axis=-1)
+        dist_to_right_leg_mid = np.linalg.norm(gripper_to_right_leg_mid, axis=-1)
+
+        # Reward for getting close to the nearest leg position
+        # Use minimum distance to encourage approaching any of the leg sites
+        min_dist_to_legs = np.minimum(
+            np.minimum(dist_to_left_leg_lower, dist_to_right_leg_lower),
+            np.minimum(dist_to_left_leg_mid, dist_to_right_leg_mid)
+        )
+
+        # Exponentially decaying reward based on distance
+        gripper_to_leg_reward = -config.w_gripper_to_leg * min_dist_to_legs.mean(-1)
+
         assert spot_fence_reward.shape == (batch_size,)
         assert spot_fallen_reward.shape == (batch_size,)
         assert goal_reward.shape == (batch_size,)
@@ -130,6 +161,7 @@ class SpotCrowdBarrier(SpotBase[SpotCrowdBarrierConfig]):
         assert gripper_proximity_reward.shape == (batch_size,)
         assert object_linear_velocity_reward.shape == (batch_size,)
         assert controls_reward.shape == (batch_size,)
+        assert gripper_to_leg_reward.shape == (batch_size,)
 
         return (
             spot_fence_reward
@@ -140,6 +172,7 @@ class SpotCrowdBarrier(SpotBase[SpotCrowdBarrierConfig]):
             + gripper_proximity_reward
             + object_linear_velocity_reward
             + controls_reward
+            + gripper_to_leg_reward
         )
 
 
@@ -149,11 +182,11 @@ class SpotCrowdBarrier(SpotBase[SpotCrowdBarrierConfig]):
         # radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
         # theta = 2 * np.pi * np.random.rand()
         # object_pos = np.array([radius * np.cos(theta), radius * np.cos(theta)]) + np.random.randn(2)
-        object_pos = DEFAULT_OBJECT_POS + np.random.randn(2)*0.001
+        object_pos = DEFAULT_OBJECT_POS + np.random.randn(2)*0.1
         # reset_object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
         # random_angle = 2 * np.pi * np.random.rand()
         reset_object_pose = np.array([*object_pos, 0.375, np.cos(np.pi / 4), -np.sin(np.pi / 4) , 0, 0 ])
-        spot_pos = DEFAULT_SPOT_POS + np.random.randn(2)*0.001
+        spot_pos = DEFAULT_SPOT_POS + np.random.randn(2)*0.1
         return np.array(
             [
                 *spot_pos,
