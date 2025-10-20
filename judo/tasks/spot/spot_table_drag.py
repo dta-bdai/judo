@@ -76,6 +76,7 @@ class SpotTableDrag(SpotBase[SpotTableDragConfig]):
 
         W_p_torso = qpos[..., self.body_pose_idx[:3]]
         W_p_table = qpos[..., self.object_pose_idx[:3]]
+        W_p_gripper = sensors[..., self.gripper_pos_idx]
         gripper_to_object = sensors[..., self.end_effector_to_object_idx]
         gripper_x_axis = sensors[..., self.gripper_x_axis_idx]
         gripper_y_axis = sensors[..., self.gripper_y_axis_idx]
@@ -83,10 +84,8 @@ class SpotTableDrag(SpotBase[SpotTableDragConfig]):
         table_y_axis = sensors[..., self.table_y_axis_idx]
         table_z_axis = sensors[..., self.table_z_axis_idx]
 
-        # Note: gripper_to_object is the vector FROM object TO gripper
-        # So: W_p_gripper = W_p_table + gripper_to_object
-        # But we need to account for the fact that sensor data has different time dimension
-        # We'll work with the relative vector directly instead
+        # Calculate gripper tip
+        W_p_gripper_tip = W_p_gripper + 0.1 * gripper_x_axis
 
         # Calculate contact points on table edges (4 edges at table height) - relative to table center
         # These are vectors from table center to contact points

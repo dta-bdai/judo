@@ -312,3 +312,16 @@ def set_default_spot_barbell_overrides() -> None:
         },
     )
 
+def set_default_spot_table_drag_overrides() -> None:
+    set_config_overrides(
+        "spot_table_drag",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 32,
+            # "use_noise_ramp": True,
+            # "noise_ramp": 5.0,
+            # "sigma_min": 0.02,
+            # "sigma_max": 2.0
+        },
+    )
