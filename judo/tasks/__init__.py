@@ -17,7 +17,7 @@ from judo.tasks.spot.spot_yellow_chair import SpotYellowChair, SpotYellowChairCo
 from judo.tasks.spot.spot_yellow_chair_ramp import SpotYellowChairRamp, SpotYellowChairRampConfig
 from judo.tasks.spot.spot_traffic_cone import SpotTrafficCone, SpotTrafficConeConfig
 from judo.tasks.spot.spot_barbell import SpotBarbell, SpotBarbellConfig
-from judo.tasks.spot.spot_table_short import SpotTableShort, SpotTableShortConfig
+from judo.tasks.spot.spot_table_drag import SpotTableDrag, SpotTableDragConfig
 
 _registered_tasks: Dict[str, Tuple[Type[Task], Type[TaskConfig]]] = {
     "spot_base": (SpotBase, SpotBaseConfig),
@@ -28,7 +28,7 @@ _registered_tasks: Dict[str, Tuple[Type[Task], Type[TaskConfig]]] = {
     "spot_traffic_cone": (SpotTrafficCone, SpotTrafficConeConfig),
     "spot_crowd_barrier": (SpotCrowdBarrier, SpotCrowdBarrierConfig),
     "spot_barbell": (SpotBarbell, SpotBarbellConfig),
-    "spot_table_short": (SpotTableShort, SpotTableShortConfig),
+    "spot_table_drag": (SpotTableDrag, SpotTableDragConfig),
     "cylinder_push": (CylinderPush, CylinderPushConfig),
     "cartpole": (Cartpole, CartpoleConfig),
     "fr3_pick": (FR3Pick, FR3PickConfig),
@@ -79,6 +79,6 @@ __all__ = [
     "SpotTrafficConeConfig",
     "SpotBarbell",
     "SpotBarbellConfig",
-    "SpotTableShort",
-    "SpotTableShortConfig",
+    "SpotTableDrag",
+    "SpotTableDragConfig",
 ]

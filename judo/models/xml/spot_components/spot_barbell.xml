@@ -25,5 +25,7 @@
     <framepos name="trace_body" objtype="site" objname="site_body"/>
     <framepos name="trace_fngr_site" objtype="site" objname="site_arm_link_fngr"/>
     <framepos name="trace_barbell" objtype="site" objname="site_object"/>
+    <frameyaxis name="sensor_gripper_y_axis" objtype="site" objname="site_arm_link_fngr"/>
+    <framexaxis name="sensor_barbell_x_axis" objtype="site" objname="site_object"/>
   </sensor>
 </mujoco>
