@@ -335,7 +335,7 @@ def set_default_spot_traffic_cone_overrides() -> None:
             "num_rollouts": 32,
             "use_noise_ramp": True,
             "noise_ramp": 2.0,
-            "sigma_min": 0.05,
-            "sigma_max": 2.0
+            "sigma_min": 0.1,
+            "sigma_max": 4.0
         },
     )

@@ -1,6 +1,7 @@
 <mujoco model="traffic_cone_defs">
 <!-- Copyright (c) 2025 Boston Dynamics AI Institute LLC. All rights reserved. -->
   <asset>
-      <mesh name="traffic_cone_mesh" file="../../meshes/traffic_cone/traffic_cone.obj"/>
+      <!-- <mesh name="traffic_cone_mesh" file="../../meshes/traffic_cone/traffic_cone.obj"/> -->
+      <mesh name="traffic_cone_mesh" file="../../meshes/traffic_cone/traffic_cone_scaled.obj"/>
   </asset>
 </mujoco>

@@ -1,5 +1,6 @@
-<mujoco model="traffic_cone">
+<mujoco model="traffic_cone_mesh">
 <!-- Copyright (c) 2025 Boston Dynamics AI Institute LLC. All rights reserved. -->
+
   <body name="traffic_cone" pos="0 0 0">
     <joint name="traffic_cone_joint" type="free"/>
 
@@ -10,8 +11,24 @@
     <!-- Estimated: Ixx ≈ Iyy ≈ 0.25, Izz ≈ 0.09 -->
     <inertial pos="0 0 0.24" mass="3.175" diaginertia="0.25 0.25 0.09"/>
 
-    <!-- Base plate: 14.5" x 14.5" x 1" (0.3683m x 0.3683m x 0.025m) -->
-    <geom name="traffic_cone_base_collision"
+    <!-- Visual geometry: use detailed mesh -->
+    <!-- quat="0 0 1 0" = 180° rotation around Y-axis -->
+    <geom name="traffic_cone_visual"
+          type="mesh"
+          mesh="traffic_cone_mesh"
+          quat="0 0 1 0"
+          pos="0 0 0.3"
+          class="visual"/>
+
+    <!-- Collision geometry: use mesh -->
+    <geom name="traffic_cone_collision"
+          type="mesh"
+          mesh="traffic_cone_mesh"
+          quat="0 0 1 0"
+          pos="0 0 0.3"
+          class="collision"/>
+
+    <!-- <geom name="traffic_cone_base_collision"
           type="box"
           size="0.18415 0.18415 0.0125"
           pos="0 0 0.0125"
@@ -22,12 +39,12 @@
           size="0.18415 0.18415 0.0125"
           pos="0 0 0.0125"
           rgba="0.1 0.1 0.1 1.0"
-          class="visual"/>
+          class="visual"/> -->
 
     <!-- Cone body approximation: height 28" = 0.7112m, base radius 5.25" = 0.13335m -->
     <!-- Using stacked cylinders to approximate cone shape -->
     <!-- Bottom section -->
-    <geom name="traffic_cone_bottom_collision"
+    <!-- <geom name="traffic_cone_bottom_collision"
           type="cylinder"
           size="0.13335 0.0889"
           pos="0 0 0.1139"
@@ -38,10 +55,10 @@
           size="0.13335 0.0889"
           pos="0 0 0.1139"
           rgba="1.0 0.4 0.0 1.0"
-          class="visual"/>
+          class="visual"/> -->
 
     <!-- Lower-middle section -->
-    <geom name="traffic_cone_lower_mid_collision"
+    <!-- <geom name="traffic_cone_lower_mid_collision"
           type="cylinder"
           size="0.10 0.0889"
           pos="0 0 0.2917"
@@ -52,10 +69,10 @@
           size="0.10 0.0889"
           pos="0 0 0.2917"
           rgba="1.0 0.4 0.0 1.0"
-          class="visual"/>
+          class="visual"/> -->
 
     <!-- Upper-middle section -->
-    <geom name="traffic_cone_upper_mid_collision"
+    <!-- <geom name="traffic_cone_upper_mid_collision"
           type="cylinder"
           size="0.07 0.0889"
           pos="0 0 0.4695"
@@ -66,10 +83,10 @@
           size="0.07 0.0889"
           pos="0 0 0.4695"
           rgba="1.0 0.4 0.0 1.0"
-          class="visual"/>
+          class="visual"/> -->
 
     <!-- Top section -->
-    <geom name="traffic_cone_top_collision"
+    <!-- <geom name="traffic_cone_top_collision"
           type="cylinder"
           size="0.02 0.0889"
           pos="0 0 0.6473"
@@ -80,7 +97,7 @@
           size="0.02 0.0889"
           pos="0 0 0.6473"
           rgba="1.0 0.4 0.0 1.0"
-          class="visual"/>
+          class="visual"/> -->
 
     <site name="trace_traffic_cone" pos="0 0 0" size="0.01"/>
     <site name="site_object" pos="0 0 0.0" size="0.01"/>
