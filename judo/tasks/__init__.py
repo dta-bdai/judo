@@ -9,7 +9,6 @@ from judo.tasks.cylinder_push import CylinderPush, CylinderPushConfig
 from judo.tasks.fr3_pick import FR3Pick, FR3PickConfig
 from judo.tasks.leap_cube import LeapCube, LeapCubeConfig
 from judo.tasks.leap_cube_down import LeapCubeDown, LeapCubeDownConfig
-from judo.tasks.spot_door_box import SpotDoorBox, SpotDoorBoxConfig
 from judo.tasks.spot.spot_base import SpotBase, SpotBaseConfig
 from judo.tasks.spot.spot_box import SpotBox, SpotBoxConfig
 from judo.tasks.spot.spot_crowd_barrier import SpotCrowdBarrier, SpotCrowdBarrierConfig
@@ -21,7 +20,6 @@ from judo.tasks.spot.spot_table_drag import SpotTableDrag, SpotTableDragConfig
 
 _registered_tasks: Dict[str, Tuple[Type[Task], Type[TaskConfig]]] = {
     "spot_base": (SpotBase, SpotBaseConfig),
-    "spot_door_box": (SpotDoorBox, SpotDoorBoxConfig),
     "spot_box": (SpotBox, SpotBoxConfig),
     "spot_yellow_chair": (SpotYellowChair, SpotYellowChairConfig),
     "spot_yellow_chair_ramp": (SpotYellowChairRamp, SpotYellowChairRampConfig),
