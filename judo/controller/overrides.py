@@ -99,3 +99,13 @@ def set_default_spot_yellow_chair_ramp_overrides() -> None:
             "horizon": 3.0,
         },
     )
+
+def set_default_spot_traffic_cone_overrides() -> None:
+    """Sets the default task-specific controller config overrides for the spot traffic cone task."""
+    set_config_overrides(
+        "spot_traffic_cone",
+        ControllerConfig,
+        {
+            "horizon": 2.0,
+        },
+    )
