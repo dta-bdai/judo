@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2024 Boston Dynamics AI Institute LLC. All rights reserved. -->
   <include file="default.xml" />
   <include file="assets.xml" />
+  
 
   <worldbody>
     <light directional="true" diffuse=".4 .4 .4" specular="0.1 0.1 0.1" pos="0 0 5" dir="0 0 -1" castshadow="false"/>
