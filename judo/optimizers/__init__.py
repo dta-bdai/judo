@@ -15,6 +15,7 @@ from judo.optimizers.overrides import (
     set_default_leap_cube_overrides,
     set_default_spot_yellow_chair_overrides,
     set_default_spot_yellow_chair_ramp_overrides,
+    set_default_spot_barbell_overrides
 )
 from judo.optimizers.ps import PredictiveSampling, PredictiveSamplingConfig
 
@@ -26,6 +27,7 @@ set_default_leap_cube_overrides()
 set_default_leap_cube_down_overrides()
 set_default_spot_yellow_chair_overrides()
 set_default_spot_yellow_chair_ramp_overrides()
+set_default_spot_barbell_overrides()
 
 _registered_optimizers: dict[str, tuple[Type[Optimizer], Type[OptimizerConfig]]] = {
     "cem": (CrossEntropyMethod, CrossEntropyMethodConfig),
