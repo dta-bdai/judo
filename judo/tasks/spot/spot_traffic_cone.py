@@ -4,14 +4,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-from mujoco import MjModel, MjData
-from judo.utils.indexing import get_pos_indices, get_sensor_indices, get_vel_indices
+from mujoco import MjData, MjModel
+
 from judo import MODEL_PATH
+from judo.tasks.spot.spot_base import GOAL_POSITIONS, SpotBase, SpotBaseConfig
 from judo.tasks.spot.spot_constants import (
     LEGS_STANDING_POS,
     STANDING_HEIGHT,
 )
-from judo.tasks.spot.spot_base import GOAL_POSITIONS, SpotBase, SpotBaseConfig
+from judo.utils.indexing import get_pos_indices, get_sensor_indices, get_vel_indices
 
 XML_PATH = str(MODEL_PATH / "xml/spot_components/spot_trafffic_cone.xml")
 
@@ -27,6 +28,7 @@ HARDWARE_FENCE_Y = (-3.0, 2.5)
 
 DEFAULT_SPOT_POS = np.array([-1.5, 0.0])
 DEFAULT_OBJECT_POS = np.array([0.0, 0.0])
+
 
 @dataclass
 class SpotTrafficConeConfig(SpotBaseConfig):
@@ -58,7 +60,6 @@ class SpotTrafficCone(SpotBase[SpotTrafficConeConfig]):
         self.object_y_axis_idx = get_sensor_indices(self.model, "object_y_axis")
         self.object_z_axis_idx = get_sensor_indices(self.model, "object_z_axis")
         self.end_effector_to_object_idx = get_sensor_indices(self.model, "sensor_arm_link_fngr")
-
 
     def reward(
         self,
@@ -99,9 +100,7 @@ class SpotTrafficCone(SpotBase[SpotTrafficConeConfig]):
         )  # ranging from -2 to 0
         object_orientation_reward = +config.w_orientation * np.exp(
             config.orientation_sparsity * orientation_alignement
-        ).sum(
-            axis=-1
-        )  # ranging from 0 to w_orientation
+        ).sum(axis=-1)  # ranging from 0 to w_orientation
 
         # Compute l2 distance from torso pos. to object pos.
         torso_proximity_reward = config.w_torso_proximity * np.minimum(
@@ -142,7 +141,6 @@ class SpotTrafficCone(SpotBase[SpotTrafficConeConfig]):
             + controls_reward
         )
 
-
     @property
     def reset_pose(self) -> np.ndarray:
         """Reset pose of robot and object."""
@@ -152,9 +150,10 @@ class SpotTrafficCone(SpotBase[SpotTrafficConeConfig]):
         # object_pos = DEFAULT_OBJECT_POS + np.random.randn(2)*0.1
         # reset_object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
         random_angle = 2 * np.pi * np.random.rand()
-        reset_object_pose = np.array([*object_pos, 0.375, np.cos(np.pi / 4), -np.sin(np.pi / 4) , 0, 0 ])
+        reset_object_pose = np.array([*object_pos, 0.275, np.cos(np.pi / 4), -np.sin(np.pi / 4), 0, 0])
+        # reset_object_pose = np.array([*object_pos, 0.275, 1, 0, 0, 0])
         # reset_object_pose = np.array([*object_pos, 0.375, np.cos(random_angle / 2), 0, 0, np.sin(random_angle / 2)])
-        spot_pos = DEFAULT_SPOT_POS + np.random.randn(2)*0.001
+        spot_pos = DEFAULT_SPOT_POS + np.random.randn(2) * 0.001
         return np.array(
             [
                 *spot_pos,
@@ -169,13 +168,15 @@ class SpotTrafficCone(SpotBase[SpotTrafficConeConfig]):
             ]
         )
 
-    def success(self, model: MjModel, data: MjData, config: SpotTrafficConeConfig, metadata: dict[str, Any] | None = None) -> bool:
+    def success(
+        self, model: MjModel, data: MjData, config: SpotTrafficConeConfig, metadata: dict[str, Any] | None = None
+    ) -> bool:
         """Check if the traffic cone is upright, regardless of position."""
         # Get object z-axis sensor data for orientation check
         object_z_axis = data.sensordata[self.object_z_axis_idx]
-        
+
         # Check orientation tolerance (object should be upright, z-axis aligned with world z-axis)
         orientation_alignment = np.dot(object_z_axis, Z_AXIS)
         orientation_success = orientation_alignment >= (1.0 - config.orientation_tolerance)
-        
+
         return bool(orientation_success)

@@ -1,0 +1,41 @@
+<mujoco model="crowd_barrier_mesh">
+<!-- Copyright (c) 2025 Boston Dynamics AI Institute LLC. All rights reserved. -->
+
+  <body name="crowd_barrier" pos="0 0 0">
+    <joint name="crowd_barrier_joint" type="free"/>
+
+    <!-- Total mass: 35 lbs = 15.876 kg -->
+    <!-- Center of mass at center of panel, approximately 0.5m height -->
+    <!-- Wide base makes it stable, but relatively light for its size -->
+    <!-- Barrier is 7' long x ~40" high with angled legs extending outward -->
+    <inertial pos="0 0 0.5" mass="15.876" diaginertia="3.5 8.0 5.0"/>
+
+    <!-- Visual geometry: use detailed mesh -->
+    <!-- quat="0.7071 0.7071 0 0" = +90° rotation around X-axis (converts Y-up to Z-up) -->
+    <geom name="crowd_barrier_visual"
+          type="mesh"
+          mesh="crowd_barrier_mesh"
+          quat="0.7071 0.7071 0 0"
+          pos="0 0 0.0"
+          rgba="1.0 0.4 0.0 1.0"
+          class="visual"/>
+
+    <!-- Collision geometry: use mesh -->
+    <geom name="crowd_barrier_collision"
+          type="mesh"
+          mesh="crowd_barrier_mesh"
+          quat="0.7071 0.7071 0 0"
+          pos="0 0 0.0"
+          class="collision"/>
+
+    <!-- Sites for tracking and sensing -->
+    <site name="trace_crowd_barrier" pos="0 0 0" size="0.01"/>
+    <site name="site_object" pos="0 0 0.5" size="0.01"/>
+
+    <!-- Sites at legs for gripper targeting -->
+    <site name="site_left_leg_lower" pos="-1.0 0 0.15" size="0.02"/>
+    <site name="site_right_leg_lower" pos="1.0 0 0.15" size="0.02"/>
+    <site name="site_left_leg_mid" pos="-0.9 0 0.5" size="0.02"/>
+    <site name="site_right_leg_mid" pos="0.9 0 0.5" size="0.02"/>
+  </body>
+</mujoco>

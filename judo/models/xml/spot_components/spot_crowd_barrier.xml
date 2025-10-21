@@ -2,7 +2,8 @@
 <!-- Copyright (c) 2024 Boston Dynamics AI Institute LLC. All rights reserved. -->
   <include file="default.xml" />
   <include file="assets.xml" />
-  
+
+  <include file="../objects/crowd_barrier_defs.xml" />
 
   <worldbody>
     <light directional="true" diffuse=".4 .4 .4" specular="0.1 0.1 0.1" pos="0 0 5" dir="0 0 -1" castshadow="false"/>
@@ -15,8 +16,9 @@
       <include file="legs.xml" />
       <include file="arm.xml" />
     </body>
-    
-    <include file="../objects/crowd_barrier.xml" />
+
+    <!-- <include file="../objects/crowd_barrier.xml" /> -->
+    <include file="../objects/crowd_barrier_mesh.xml" />
   </worldbody>
 
   <include file="actuator.xml" />

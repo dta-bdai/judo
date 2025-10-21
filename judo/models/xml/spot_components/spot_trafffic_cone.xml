@@ -15,9 +15,9 @@
       <include file="legs.xml" />
       <include file="arm.xml" />
     </body>
-    
-    <include file="../objects/traffic_cone_mesh.xml" />
-    <!-- <include file="../objects/traffic_cone.xml" /> -->
+
+    <!-- <include file="../objects/traffic_cone_mesh.xml" /> -->
+    <include file="../objects/traffic_cone.xml" />
   </worldbody>
 
   <include file="actuator.xml" />
