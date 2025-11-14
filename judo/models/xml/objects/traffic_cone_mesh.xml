@@ -1,0 +1,35 @@
+<mujoco model="traffic_cone_mesh">
+<!-- Copyright (c) 2025 Boston Dynamics AI Institute LLC. All rights reserved. -->
+
+  <body name="traffic_cone" pos="0 0 0">
+    <joint name="traffic_cone_joint" type="free"/>
+
+    <!-- Total mass: 7 lbs = 3.175 kg -->
+    <!-- Center of mass approximately at 1/3 height of cone = ~0.24m -->
+    <!-- Hollow cone: mass concentrated at surface, higher moments of inertia than solid -->
+    <!-- For hollow cone, I ≈ (1/2)mr² for radial, (1/4)m(r² + 2h²/3) for axial -->
+    <!-- Estimated: Ixx ≈ Iyy ≈ 0.25, Izz ≈ 0.09 -->
+    <inertial pos="0 0 0.24" mass="3.175" diaginertia="0.25 0.25 0.09"/>
+
+    <!-- Visual geometry: use detailed mesh -->
+    <!-- quat="0.7071 0.7071 0 0" = +90° rotation around X-axis (converts Y-up to Z-up) -->
+    <geom name="traffic_cone_visual"
+          type="mesh"
+          mesh="traffic_cone_mesh"
+          quat="0.7071 0.7071 0 0"
+          pos="0 0 0.0"
+          rgba="1.0 0.4 0.0 1.0"
+          class="visual"/>
+
+    <!-- Collision geometry: use mesh -->
+    <geom name="traffic_cone_collision"
+          type="mesh"
+          mesh="traffic_cone_mesh"
+          quat="0.7071 0.7071 0 0"
+          pos="0 0 0.0"
+          class="collision"/>
+
+    <site name="trace_traffic_cone" pos="0 0 0" size="0.01"/>
+    <site name="site_object" pos="0 0 0.24" size="0.01"/>
+  </body>
+</mujoco>
