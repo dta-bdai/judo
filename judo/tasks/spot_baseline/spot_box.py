@@ -11,7 +11,7 @@ from judo.utils.fields import np_1d_field
 
 from judo import MODEL_PATH
 from judo.tasks.spot_baseline.spot_base import GOAL_POSITIONS
-from judo.tasks.spot_baseline.spot_constants import STANDING_HEIGHT
+from judo.tasks.spot_baseline.spot_constants import STANDING_HEIGHT, LEGS_STANDING_POS
 from judo.tasks.spot_baseline.spot_locomotion import (
     SpotLocomotion,
     SpotLocomotionConfig,
@@ -41,18 +41,18 @@ class SpotBoxBaselineConfig(SpotLocomotionConfig):
     w_position: float = 0.0
 
     box_goal_position: np.ndarray = np_1d_field(
-        np.array(GOAL_POSITIONS().origin, dtype=np.float64),
+        np.array([0.0, 0.0, 0.254], dtype=np.float64),
         names=["x", "y", "z"],
         mins=[-5.0, -5.0, 0.0],
         maxs=[5.0, 5.0, 1.0],
         steps=[0.1, 0.1, 0.05],
         vis_name="box_goal_position",
         xyz_vis_indices=[0, 1, 2],
-        xyz_vis_defaults=list(GOAL_POSITIONS().origin),
+        xyz_vis_defaults=[0.0, 0.0, 0.254],
     )
 
     w_orientation: float = 15.0
-    w_torso_proximity: float = 40.0
+    w_torso_proximity: float = 0.1
     w_gripper_proximity: float = 4.0
     orientation_threshold: float = 0.5
 
@@ -118,33 +118,46 @@ class SpotBoxBaseline(SpotLocomotion):
     @property
     def reset_pose(self) -> np.ndarray:
         """Randomized reset pose for robot and box."""
+        # radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
+        # theta = 2 * np.pi * np.random.rand()
+        # object_xy = np.array(
+        #     [
+        #         radius * np.cos(theta),
+        #         radius * np.sin(theta),
+        #     ]
+        # )
+        # object_xy += 0.1 * np.random.randn(2)
+
+        # base_xy = np.random.randn(2)
+        # object_pose = np.array([*object_xy, 0.254, 1, 0, 0, 0])
+
+        # default_state = super().reset_pose
+        # reset = default_state.copy()
+        # reset[0:2] = base_xy
+        # reset[self.object_pose_idx] = object_pose
+        # return reset
         radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
         theta = 2 * np.pi * np.random.rand()
-        object_xy = np.array(
+        object_pos = np.array([radius * np.cos(theta), radius * np.cos(theta)]) + np.random.randn(2)
+        reset_object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
+
+        return np.array(
             [
-                radius * np.cos(theta),
-                radius * np.sin(theta),
+                *np.random.randn(2),
+                STANDING_HEIGHT,
+                1,
+                0,
+                0,
+                0,
+                *LEGS_STANDING_POS,
+                *self.reset_arm_pos,
+                *reset_object_pose,
             ]
         )
-        object_xy += 0.1 * np.random.randn(2)
 
-        base_xy = np.random.randn(2)
-        object_pose = np.array([*object_xy, 0.254, 1, 0, 0, 0])
-
-        self._cached_reset = {
-            "object_pose": object_pose,
-            "object_xy": object_xy,
-            "base_xy": base_xy,
-        }
-
-        default_state = super().reset_pose
-        reset = default_state.copy()
-        reset[0:2] = base_xy
-        reset[self.object_pose_idx] = object_pose
-        return reset
 
     def success(self, model: MjModel, data: MjData, config: SpotBoxBaselineConfig, metadata: dict[str, Any] | None = None) -> bool:
         """Check if the box is in the goal position."""
         object_pos = data.qpos[..., self.object_pose_idx[0:3]]
         goal_pos = np.array(config.box_goal_position)
-        return np.linalg.norm(object_pos - goal_pos, axis=-1) < 0.05
+        return np.linalg.norm(object_pos - goal_pos, axis=-1, ord=np.inf) < 0.5

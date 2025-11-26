@@ -19,7 +19,7 @@ class SkillPolicyConfig(OptimizerConfig):
     rather than sampling and optimizing trajectories.
     """
 
-    onnx_model_path: str = "/home/jzhang/Documents/judo-private/scripts/skill_policies/best_skill_policy.onnx"
+    onnx_model_path: str = "/home/jzhang/Documents/judo-private/scripts/skill_policies/best_skill_policy (1).onnx"
 
     onnx_session = onnxruntime.InferenceSession(
             str(onnx_model_path),
@@ -27,7 +27,7 @@ class SkillPolicyConfig(OptimizerConfig):
         )
 
     # Policy parameters
-    policy_frequency: float = 50.0  # Hz - frequency at which policy runs
+    policy_frequency: float = 20.0  # Hz - frequency at which policy runs
     locomotion_only: bool = False  # Whether to only use locomotion (no arm commands)
 
     # Target command - position of target object in world frame
@@ -37,7 +37,7 @@ class SkillPolicyConfig(OptimizerConfig):
     skill_action_length: int = 10  # Length of skill action vector
 
     # Override num_rollouts to 1 since we don't do sampling
-    num_rollouts: int = 1
+    num_rollouts: int = 0
 
 
 class SkillPolicyOptimizer(Optimizer[SkillPolicyConfig]):

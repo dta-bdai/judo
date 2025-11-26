@@ -20,7 +20,7 @@ import onnxruntime
 from scipy.spatial.transform import Rotation as R
 from judo.utils.mujoco import SimBackendSpot
 from judo.tasks.spot.spot_base import SpotBase
-
+from pathlib import Path
 
 # ##### #
 # UTILS #
@@ -249,7 +249,7 @@ def benchmark_single_task_and_optimizer(
     # Initialize Spot backend if needed
     spot_sim_backend = None
     is_spot_task = 'spot' in task_name and 'baseline' not in task_name
-    
+
     if is_spot_task:
         spot_sim_backend = SimBackendSpot(task_to_sim_ctrl=task.task_to_sim_ctrl)
 
@@ -428,6 +428,7 @@ def summarize_benchmark_results(all_results: dict[str, dict[str, list[dict[str, 
             print(f"    Successes: {num_successes}/{len(episode_results_for_task_opt_pair)}")
             print(f"    Failures: {num_failures}/{len(episode_results_for_task_opt_pair)}")
             print(f"    Average episode length: {avg_length:.4f} seconds")
+            print(f"    STD of episode length: {np.std([r['length'] for r in episode_results_for_task_opt_pair]):.4f} seconds")
     print("=" * 80)
 
 
@@ -442,6 +443,7 @@ def benchmark_multiple_tasks_and_optimizers(
     onnx_session_dict: dict[str, Any] | None = None,
     target_cmd_dict: dict[str, np.ndarray] | None = None,
     locomotion_only: bool = False,
+    save_results: bool = False,
 ) -> dict[tuple[str, str], list[dict[str, Any]]]:
     """Benchmarks multiple tasks and optimizers.
 
@@ -477,19 +479,8 @@ def benchmark_multiple_tasks_and_optimizers(
     )
 
     # Check if skill_policy is in optimizer_names
-    if "skill_policy" in optimizer_names:
-        if onnx_session_dict is None:
-            raise ValueError(
-                "onnx_session_dict must be provided when benchmarking skill_policy optimizer. "
-                "It should map task names to their corresponding ONNX InferenceSessions."
-            )
-        # Verify all tasks have ONNX sessions
-        for task_name in task_names:
-            if task_name not in onnx_session_dict:
-                raise ValueError(
-                    f"Task '{task_name}' not found in onnx_session_dict. "
-                    f"Available tasks: {list(onnx_session_dict.keys())}"
-                )
+    # Note: We only require ONNX sessions for tasks that will actually use skill_policy
+    # Other tasks can use different optimizers without needing ONNX sessions
 
     all_results = {}
     for i, task_name in enumerate(task_names):
@@ -501,7 +492,11 @@ def benchmark_multiple_tasks_and_optimizers(
             # Get skill policy parameters if applicable
             onnx_session = None
             target_cmd = None
-            if optimizer_name == "skill_policy" and onnx_session_dict is not None:
+            if optimizer_name == "skill_policy":
+                # Check if this task has an ONNX session
+                if onnx_session_dict is None or task_name not in onnx_session_dict:
+                    print(f"    Skipping skill_policy for {task_name} (no ONNX session provided)")
+                    continue
                 onnx_session = onnx_session_dict[task_name]
                 if target_cmd_dict is not None and task_name in target_cmd_dict:
                     target_cmd = target_cmd_dict[task_name]
@@ -522,26 +517,28 @@ def benchmark_multiple_tasks_and_optimizers(
 
     # save the benchmark results to a file
     filename = f"benchmark_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.h5"
-    with h5py.File(filename, "w") as f:
-        # attributes
-        f.attrs["viz_dt"] = viz_dt
+    
+    if save_results:
+        with h5py.File(filename, "w") as f:
+            # attributes
+            f.attrs["viz_dt"] = viz_dt
 
-        for task_name, task_result_dict in all_results.items():
-            task_group = f.create_group(task_name)
-            for optimizer_name, episodes in task_result_dict.items():
-                opt_group = task_group.create_group(optimizer_name)
-                for i, episode in enumerate(episodes):
-                    ep_group = opt_group.create_group(f"episode_{i}")
-                    ep_group.create_dataset("rewards", data=episode["rewards"])
-                    ep_group.create_dataset("qpos_traj", data=episode["qpos_traj"])
-                    ep_group.create_dataset("mocap_pos_traj", data=episode["mocap_pos_traj"])
-                    ep_group.create_dataset("mocap_quat_traj", data=episode["mocap_quat_traj"])
-                    ep_group.attrs["success"] = episode["success"]
-                    ep_group.attrs["failure"] = episode["failure"]
-                    ep_group.attrs["length"] = episode["length"]
-                    metrics_group = ep_group.create_group("metrics")
-                    for metric_name, metric_values in episode["metrics"].items():
-                        metrics_group.create_dataset(metric_name, data=np.asarray(metric_values))
+            for task_name, task_result_dict in all_results.items():
+                task_group = f.create_group(task_name)
+                for optimizer_name, episodes in task_result_dict.items():
+                    opt_group = task_group.create_group(optimizer_name)
+                    for i, episode in enumerate(episodes):
+                        ep_group = opt_group.create_group(f"episode_{i}")
+                        ep_group.create_dataset("rewards", data=episode["rewards"])
+                        ep_group.create_dataset("qpos_traj", data=episode["qpos_traj"])
+                        ep_group.create_dataset("mocap_pos_traj", data=episode["mocap_pos_traj"])
+                        ep_group.create_dataset("mocap_quat_traj", data=episode["mocap_quat_traj"])
+                        ep_group.attrs["success"] = episode["success"]
+                        ep_group.attrs["failure"] = episode["failure"]
+                        ep_group.attrs["length"] = episode["length"]
+                        metrics_group = ep_group.create_group("metrics")
+                        for metric_name, metric_values in episode["metrics"].items():
+                            metrics_group.create_dataset(metric_name, data=np.asarray(metric_values))
 
     # print a summary of the results
     summarize_benchmark_results(all_results)
@@ -557,76 +554,70 @@ def benchmark_multiple_tasks_and_optimizers(
     return all_results
 
 
-if __name__ == "__main__":
-    from pathlib import Path
-
-    # Determine if we should use skill policy
-    # Configure which optimizers to benchmark
+def benchmark_skill_policy():
     optimizer_names = [
-        # "cem",
-        # "mppi",
         "skill_policy",
     ]
-
-    # Load ONNX session if skill_policy is enabled
     onnx_session_dict = None
-    if "skill_policy" in optimizer_names:
-        # Path to the ONNX model (relative to scripts directory)
-        script_dir = Path(__file__).parent
-        onnx_path = script_dir / "skill_policies" / "best_skill_policy.onnx"
 
-        if not onnx_path.exists():
-            raise FileNotFoundError(
-                f"ONNX model not found at: {onnx_path}\n"
-                "Please ensure the skill policy model is placed at scripts/skill_policies/best_skill_policy.onnx"
-            )
+    # Path to the ONNX model (relative to scripts directory)
+    script_dir = Path(__file__).parent
+    onnx_path = script_dir / "skill_policies" / "best_skill_policy (1).onnx"
 
-        print(f"Loading ONNX model from: {onnx_path}")
-        session = onnxruntime.InferenceSession(
-            str(onnx_path),
-            providers=["CPUExecutionProvider"]
+    if not onnx_path.exists():
+        raise FileNotFoundError(
+            f"ONNX model not found at: {onnx_path}\n"
+            "Please ensure the skill policy model is placed at scripts/skill_policies/best_skill_policy.onnx"
         )
-        print(f"✓ ONNX model loaded successfully")
 
-        # Map the session to task names
-        # NOTE: Skill policy requires tasks with nu=19 (full joint control)
-        # Use spot_baseline tasks, not spot tasks with custom control mapping
-        onnx_session_dict = {
-            "spot_box_baseline": session,
-            # "spot_locomotion": session,
-            # Add more spot_baseline tasks as needed
-        }
+    print(f"Loading ONNX model from: {onnx_path}")
+    session = onnxruntime.InferenceSession(
+        str(onnx_path),
+        providers=["CPUExecutionProvider"]
+    )
+    print(f"✓ ONNX model loaded successfully")
+
+    # Map the session to task names
+    # NOTE: Skill policy requires tasks with nu=19 (full joint control)
+    # Use spot_baseline tasks, not spot tasks with custom control mapping
+    onnx_session_dict = {
+        "spot_box_baseline": session,
+    }
 
     # Run benchmark
     benchmark_multiple_tasks_and_optimizers(
         task_names=[
-            # "cylinder_push",
-            # "cartpole",
-            # "fr3_pick",
-            # "g1_manipulation",
-            # "g1_stand",
-            # "go2_walk",
-            # "leap_cube",
-            # "leap_cube_down",
-            # "walker",
             "spot_box_baseline",  # Use spot_baseline tasks for skill policy (nu=19)
-            # "spot_locomotion",
         ],
         optimizer_names=optimizer_names,
-        num_episodes=5,
+        num_episodes=50,
         episode_length_s=[
-            # 30.0,  # cylinder_push
-            # 10.0,  # cartpole
-            # 30.0,  # fr3_pick
-            # 30.0,  # g1_manipulation
-            # 30.0,  # g1_stand
-            # 30.0,  # go2_walk
-            # 60.0,  # leap_cube
-            # 60.0,  # leap_cube_down
-            # 10.0,  # walker
             30.0,  # spot_box_baseline
-            # 30.0,  # spot_locomotion
         ],
         viz_dt=0.02,
         onnx_session_dict=onnx_session_dict,
     )
+
+def benchmark_sampling():
+    optimizer_names = [
+        "cem",
+    ]
+    benchmark_multiple_tasks_and_optimizers(
+        task_names=[
+            "spot_box",
+        ],
+        optimizer_names=optimizer_names,
+        num_episodes=50,
+        episode_length_s=[
+            30.0,  # spot_box
+        ],
+        viz_dt=0.02,
+    )
+
+if __name__ == "__main__":
+    import random
+    random.seed(42)
+    benchmark_skill_policy()
+
+    np.random.seed(42)
+    benchmark_sampling()
