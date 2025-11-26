@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+from mujoco import MjModel, MjData
 
 from judo.utils.indexing import get_pos_indices, get_sensor_indices
 from judo import MODEL_PATH
@@ -125,3 +126,9 @@ class SpotBox(SpotBase):
                 *reset_object_pose,
             ]
         )
+
+    def success(self, model: MjModel, data: MjData, config: SpotBoxConfig, metadata: dict[str, Any] | None = None) -> bool:
+        """Check if the box is in the goal position."""
+        object_pos = data.qpos[..., self.object_pose_idx[0:3]]
+        goal_pos = np.array(config.goal_position)
+        return np.linalg.norm(object_pos - goal_pos, axis=-1) < 0.05
