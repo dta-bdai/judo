@@ -12,6 +12,8 @@ from judo.controller.overrides import (
     set_default_spot_yellow_chair_overrides,
     set_default_spot_yellow_chair_ramp_overrides,
     set_default_spot_traffic_cone_overrides,
+    set_default_spot_box_overrides,
+    set_default_spot_box_baseline_overrides,
 )
 from judo.utils.assets import download_and_extract_meshes
 
@@ -30,6 +32,8 @@ set_default_leap_cube_down_overrides()
 set_default_spot_yellow_chair_overrides()
 set_default_spot_yellow_chair_ramp_overrides()
 set_default_spot_traffic_cone_overrides()
+set_default_spot_box_overrides()
+set_default_spot_box_baseline_overrides()
 
 __all__ = [
     "Controller",

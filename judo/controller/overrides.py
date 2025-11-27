@@ -109,3 +109,23 @@ def set_default_spot_traffic_cone_overrides() -> None:
             "horizon": 2.0,
         },
     )
+
+def set_default_spot_box_overrides() -> None:
+    """Sets the default task-specific controller config overrides for the spot box task."""
+    set_config_overrides(
+        "spot_box",
+        ControllerConfig,
+        {
+            "control_freq": 20.0,
+        },
+    )
+
+def set_default_spot_box_baseline_overrides() -> None:
+    """Sets the default task-specific controller config overrides for the spot box baseline task."""
+    set_config_overrides(
+        "spot_box_baseline",
+        ControllerConfig,
+        {
+            "control_freq": 50.0,
+        },
+    )

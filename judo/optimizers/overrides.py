@@ -339,3 +339,25 @@ def set_default_spot_traffic_cone_overrides() -> None:
             "sigma_max": 4.0
         },
     )
+
+def set_default_spot_box_overrides() -> None:
+    set_config_overrides(
+        "spot_box",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 32,
+            "use_noise_ramp": True,
+            "noise_ramp": 2.0,
+            "sigma_min": 0.1,
+            "sigma_max": 4.0
+        },
+    )
+    set_config_overrides(
+        "spot_box",
+        MPPIConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 32,
+        },
+    )

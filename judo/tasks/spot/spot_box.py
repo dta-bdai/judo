@@ -117,15 +117,36 @@ class SpotBox(SpotBase):
 
     @property
     def reset_pose(self) -> np.ndarray:
-        """Reset pose of robot and object."""
-        radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
-        theta = 2 * np.pi * np.random.rand()
-        object_pos = np.array([radius * np.cos(theta), radius * np.cos(theta)]) + np.random.randn(2)
+        """Reset pose of robot and object.
+
+        Ensures robot and box are at least 0.5m apart.
+        """
+        MIN_DISTANCE = 0.5  # Minimum distance between robot and box
+        max_attempts = 100
+
+        # Initialize with defaults
+        base_xy = np.zeros(2)
+        object_pos = np.zeros(2)
+
+        for _ in range(max_attempts):
+            # Sample robot base position
+            base_xy = np.random.randn(2)
+
+            # Sample object position in annulus
+            radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
+            theta = 2 * np.pi * np.random.rand()
+            object_pos = np.array([radius * np.cos(theta), radius * np.sin(theta)]) + 0.1 * np.random.randn(2)
+
+            # Check distance
+            distance = np.linalg.norm(base_xy - object_pos[:2])
+            if distance >= MIN_DISTANCE:
+                break
+
         reset_object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
 
         return np.array(
             [
-                *np.random.randn(2),
+                *base_xy,
                 STANDING_HEIGHT,
                 1,
                 0,

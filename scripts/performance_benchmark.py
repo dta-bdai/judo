@@ -592,7 +592,7 @@ def benchmark_skill_policy():
         optimizer_names=optimizer_names,
         num_episodes=50,
         episode_length_s=[
-            30.0,  # spot_box_baseline
+            60.0,  # spot_box_baseline
         ],
         viz_dt=0.02,
         onnx_session_dict=onnx_session_dict,
@@ -609,15 +609,15 @@ def benchmark_sampling():
         optimizer_names=optimizer_names,
         num_episodes=50,
         episode_length_s=[
-            30.0,  # spot_box
+            60.0,  # spot_box
         ],
         viz_dt=0.02,
     )
 
 if __name__ == "__main__":
     import random
-    random.seed(42)
+    # random.seed(42)
     benchmark_skill_policy()
 
-    np.random.seed(42)
+    # np.random.seed(42)
     benchmark_sampling()
