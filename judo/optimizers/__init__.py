@@ -18,8 +18,10 @@ from judo.optimizers.overrides import (
     set_default_spot_barbell_overrides,
     set_default_spot_table_drag_overrides,
     set_default_spot_traffic_cone_overrides,
+    set_default_spot_box_overrides,
 )
 from judo.optimizers.ps import PredictiveSampling, PredictiveSamplingConfig
+from judo.optimizers.skill_policy import SkillPolicyOptimizer, SkillPolicyConfig
 
 set_default_caltech_leap_cube_overrides()
 set_default_cartpole_overrides()
@@ -32,12 +34,14 @@ set_default_spot_yellow_chair_ramp_overrides()
 set_default_spot_barbell_overrides()
 set_default_spot_table_drag_overrides()
 set_default_spot_traffic_cone_overrides()
+set_default_spot_box_overrides()
 
 _registered_optimizers: dict[str, tuple[Type[Optimizer], Type[OptimizerConfig]]] = {
     "cem": (CrossEntropyMethod, CrossEntropyMethodConfig),
     "mppi": (MPPI, MPPIConfig),
     "ps": (PredictiveSampling, PredictiveSamplingConfig),
     "cmaes": (CMAES, CMAESConfig),
+    "skill_policy": (SkillPolicyOptimizer, SkillPolicyConfig),
 }
 
 
@@ -68,4 +72,6 @@ __all__ = [
     "OptimizerConfig",
     "PredictiveSampling",
     "PredictiveSamplingConfig",
+    "SkillPolicyOptimizer",
+    "SkillPolicyConfig",
 ]

@@ -20,9 +20,7 @@ import onnxruntime
 from scipy.spatial.transform import Rotation as R
 from judo.utils.mujoco import SimBackendSpot
 from judo.tasks.spot.spot_base import SpotBase
-
-
-SPOT_BACKEND_AVAILABLE = True
+from pathlib import Path
 
 # ##### #
 # UTILS #
@@ -89,7 +87,12 @@ def summarize_dataclass(dataclass_instance) -> None:  # noqa: ANN001
 
 
 def load_controller(
-    task_name: str, optimizer_name: str, verbose: bool = False
+    task_name: str,
+    optimizer_name: str,
+    verbose: bool = False,
+    onnx_session: Any | None = None,
+    target_cmd: np.ndarray | None = None,
+    locomotion_only: bool = False,
 ) -> tuple[
     Task,
     Optimizer,
@@ -98,7 +101,19 @@ def load_controller(
     OptimizerConfig,
     ControllerConfig,
 ]:
-    """Loads a controller associated with a task and optimizer."""
+    """Loads a controller associated with a task and optimizer.
+
+    Args:
+        task_name: Name of the task to load
+        optimizer_name: Name of the optimizer to use
+        verbose: Whether to print configuration details
+        onnx_session: ONNX session for skill policy (required if optimizer_name == "skill_policy")
+        target_cmd: Target command for skill policy (xyz position)
+        locomotion_only: Whether to use locomotion only for skill policy
+
+    Returns:
+        Tuple of (task, optimizer, controller, task_config, optimizer_config, controller_config)
+    """
     # load task
     task_dict = get_registered_tasks()
     if task_name not in task_dict:
@@ -113,13 +128,36 @@ def load_controller(
         raise ValueError(f"Optimizer '{optimizer_name}' is not registered.")
     optimizer_cls, optimizer_config_cls = optimizer_dict[optimizer_name]
     optimizer_config = optimizer_config_cls()
-    optimizer_config.set_override(task_name)
+
+    # Special handling for skill policy optimizer
+    if optimizer_name == "skill_policy":
+        if onnx_session is None:
+            raise ValueError(
+                "onnx_session must be provided when using skill_policy optimizer. "
+                "Load an ONNX model with onnxruntime.InferenceSession() and pass it here."
+            )
+        # Set skill policy specific config
+        optimizer_config.onnx_session = onnx_session
+        optimizer_config.locomotion_only = locomotion_only
+        if target_cmd is not None:
+            optimizer_config.target_cmd = target_cmd
+        # Force num_rollouts to 1 for skill policy
+        optimizer_config.num_rollouts = 1
+    else:
+        # Standard optimizer config override
+        optimizer_config.set_override(task_name)
+
     optimizer = optimizer_cls(optimizer_config, task.nu)
 
     # load controller
     controller_config_cls = ControllerConfig
     controller_config = controller_config_cls()
     controller_config.set_override(task_name)
+
+    # For skill policy, set max_opt_iters to 1 (no optimization loop needed)
+    if optimizer_name == "skill_policy":
+        controller_config.max_opt_iters = 1
+
     controller = Controller(
         controller_config,
         task,
@@ -135,7 +173,15 @@ def load_controller(
         print(f"Task ({task_name}):")
         summarize_dataclass(task_config)
         print(f"Optimizer ({optimizer_name}):")
-        summarize_dataclass(optimizer_config)
+        # Don't print onnx_session object, it's too verbose
+        if optimizer_name == "skill_policy":
+            print(f"  onnx_session: <InferenceSession>")
+            print(f"  target_cmd: {optimizer_config.target_cmd}")
+            print(f"  locomotion_only: {optimizer_config.locomotion_only}")
+            print(f"  num_rollouts: {optimizer_config.num_rollouts}")
+            print(f"  num_nodes: {optimizer_config.num_nodes}")
+        else:
+            summarize_dataclass(optimizer_config)
         print("Controller:")
         summarize_dataclass(controller_config)
         print("*" * 80)
@@ -151,6 +197,9 @@ def benchmark_single_task_and_optimizer(
     viz_dt: float = 0.02,
     min_dt: float = 0.0001,
     verbose: bool = False,
+    onnx_session: Any | None = None,
+    target_cmd: np.ndarray | None = None,
+    locomotion_only: bool = False,
 ) -> list[dict[str, Any]]:
     """Benchmarks a single task and optimizer combination.
 
@@ -162,6 +211,9 @@ def benchmark_single_task_and_optimizer(
         viz_dt: Timestep for visualization/logging (in seconds).
         min_dt: Minimum timestep as a quantum unit for synchronization between simulation and controller.
         verbose: Whether to print detailed configuration information.
+        onnx_session: ONNX session for skill policy (required if optimizer_name == "skill_policy")
+        target_cmd: Target command for skill policy (xyz position)
+        locomotion_only: Whether to use locomotion only for skill policy
 
     Returns:
         benchmark_results: A list of dictionaries containing results for each episode.
@@ -171,6 +223,9 @@ def benchmark_single_task_and_optimizer(
         task_name,
         optimizer_name,
         verbose=verbose,
+        onnx_session=onnx_session,
+        target_cmd=target_cmd,
+        locomotion_only=locomotion_only,
     )
     sim_model = task.sim_model
     ctrl_model = task.model
@@ -193,7 +248,8 @@ def benchmark_single_task_and_optimizer(
 
     # Initialize Spot backend if needed
     spot_sim_backend = None
-    is_spot_task = hasattr(task, 'task_to_sim_ctrl')
+    is_spot_task = 'spot' in task_name and 'baseline' not in task_name
+
     if is_spot_task:
         spot_sim_backend = SimBackendSpot(task_to_sim_ctrl=task.task_to_sim_ctrl)
 
@@ -372,6 +428,7 @@ def summarize_benchmark_results(all_results: dict[str, dict[str, list[dict[str, 
             print(f"    Successes: {num_successes}/{len(episode_results_for_task_opt_pair)}")
             print(f"    Failures: {num_failures}/{len(episode_results_for_task_opt_pair)}")
             print(f"    Average episode length: {avg_length:.4f} seconds")
+            print(f"    STD of episode length: {np.std([r['length'] for r in episode_results_for_task_opt_pair]):.4f} seconds")
     print("=" * 80)
 
 
@@ -383,6 +440,10 @@ def benchmark_multiple_tasks_and_optimizers(
     min_dt: float = 0.0001,
     viz_dt: float = 0.02,
     verbose: bool = False,
+    onnx_session_dict: dict[str, Any] | None = None,
+    target_cmd_dict: dict[str, np.ndarray] | None = None,
+    locomotion_only: bool = False,
+    save_results: bool = False,
 ) -> dict[tuple[str, str], list[dict[str, Any]]]:
     """Benchmarks multiple tasks and optimizers.
 
@@ -398,6 +459,10 @@ def benchmark_multiple_tasks_and_optimizers(
         min_dt: Minimum timestep as a quantum unit for synchronization between simulation and controller.
         viz_dt: Timestep for visualization/logging (in seconds).
         verbose: Whether to print detailed configuration information.
+        onnx_session_dict: Dictionary mapping task names to ONNX sessions (for skill_policy optimizer).
+            If None and skill_policy is in optimizer_names, an error will be raised.
+        target_cmd_dict: Dictionary mapping task names to target commands (for skill_policy optimizer).
+        locomotion_only: Whether to use locomotion only for skill policy
 
     Returns:
         all_results: A dictionary mapping (task_name, optimizer_name) pairs to their benchmark results.
@@ -413,12 +478,29 @@ def benchmark_multiple_tasks_and_optimizers(
         "If episode_length_s is a list, it must match the length of task_names."
     )
 
+    # Check if skill_policy is in optimizer_names
+    # Note: We only require ONNX sessions for tasks that will actually use skill_policy
+    # Other tasks can use different optimizers without needing ONNX sessions
+
     all_results = {}
     for i, task_name in enumerate(task_names):
         print(f"Benchmarking Task: {task_name}...")
         all_results[task_name] = {}
         for optimizer_name in optimizer_names:
             print(f"  Benchmarking Optimizer: {optimizer_name}...")
+
+            # Get skill policy parameters if applicable
+            onnx_session = None
+            target_cmd = None
+            if optimizer_name == "skill_policy":
+                # Check if this task has an ONNX session
+                if onnx_session_dict is None or task_name not in onnx_session_dict:
+                    print(f"    Skipping skill_policy for {task_name} (no ONNX session provided)")
+                    continue
+                onnx_session = onnx_session_dict[task_name]
+                if target_cmd_dict is not None and task_name in target_cmd_dict:
+                    target_cmd = target_cmd_dict[task_name]
+
             results = benchmark_single_task_and_optimizer(
                 task_name,
                 optimizer_name,
@@ -427,31 +509,36 @@ def benchmark_multiple_tasks_and_optimizers(
                 min_dt=min_dt,
                 viz_dt=viz_dt,
                 verbose=verbose,
+                onnx_session=onnx_session,
+                target_cmd=target_cmd,
+                locomotion_only=locomotion_only,
             )
             all_results[task_name][optimizer_name] = results
 
     # save the benchmark results to a file
     filename = f"benchmark_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.h5"
-    with h5py.File(filename, "w") as f:
-        # attributes
-        f.attrs["viz_dt"] = viz_dt
+    
+    if save_results:
+        with h5py.File(filename, "w") as f:
+            # attributes
+            f.attrs["viz_dt"] = viz_dt
 
-        for task_name, task_result_dict in all_results.items():
-            task_group = f.create_group(task_name)
-            for optimizer_name, episodes in task_result_dict.items():
-                opt_group = task_group.create_group(optimizer_name)
-                for i, episode in enumerate(episodes):
-                    ep_group = opt_group.create_group(f"episode_{i}")
-                    ep_group.create_dataset("rewards", data=episode["rewards"])
-                    ep_group.create_dataset("qpos_traj", data=episode["qpos_traj"])
-                    ep_group.create_dataset("mocap_pos_traj", data=episode["mocap_pos_traj"])
-                    ep_group.create_dataset("mocap_quat_traj", data=episode["mocap_quat_traj"])
-                    ep_group.attrs["success"] = episode["success"]
-                    ep_group.attrs["failure"] = episode["failure"]
-                    ep_group.attrs["length"] = episode["length"]
-                    metrics_group = ep_group.create_group("metrics")
-                    for metric_name, metric_values in episode["metrics"].items():
-                        metrics_group.create_dataset(metric_name, data=np.asarray(metric_values))
+            for task_name, task_result_dict in all_results.items():
+                task_group = f.create_group(task_name)
+                for optimizer_name, episodes in task_result_dict.items():
+                    opt_group = task_group.create_group(optimizer_name)
+                    for i, episode in enumerate(episodes):
+                        ep_group = opt_group.create_group(f"episode_{i}")
+                        ep_group.create_dataset("rewards", data=episode["rewards"])
+                        ep_group.create_dataset("qpos_traj", data=episode["qpos_traj"])
+                        ep_group.create_dataset("mocap_pos_traj", data=episode["mocap_pos_traj"])
+                        ep_group.create_dataset("mocap_quat_traj", data=episode["mocap_quat_traj"])
+                        ep_group.attrs["success"] = episode["success"]
+                        ep_group.attrs["failure"] = episode["failure"]
+                        ep_group.attrs["length"] = episode["length"]
+                        metrics_group = ep_group.create_group("metrics")
+                        for metric_name, metric_values in episode["metrics"].items():
+                            metrics_group.create_dataset(metric_name, data=np.asarray(metric_values))
 
     # print a summary of the results
     summarize_benchmark_results(all_results)
@@ -467,35 +554,69 @@ def benchmark_multiple_tasks_and_optimizers(
     return all_results
 
 
-if __name__ == "__main__":
+def benchmark_skill_policy(num_episodes: int = 50):
+    optimizer_names = [
+        "skill_policy",
+    ]
+    onnx_session_dict = None
+
+    # Path to the ONNX model (relative to scripts directory)
+    script_dir = Path(__file__).parent
+    onnx_path = script_dir / "skill_policies" / "best_skill_policy (1).onnx"
+
+    if not onnx_path.exists():
+        raise FileNotFoundError(
+            f"ONNX model not found at: {onnx_path}\n"
+            "Please ensure the skill policy model is placed at scripts/skill_policies/best_skill_policy.onnx"
+        )
+
+    print(f"Loading ONNX model from: {onnx_path}")
+    session = onnxruntime.InferenceSession(
+        str(onnx_path),
+        providers=["CPUExecutionProvider"]
+    )
+    print(f"✓ ONNX model loaded successfully")
+
+    # Map the session to task names
+    # NOTE: Skill policy requires tasks with nu=19 (full joint control)
+    # Use spot_baseline tasks, not spot tasks with custom control mapping
+    onnx_session_dict = {
+        "spot_box_baseline": session,
+    }
+
+    # Run benchmark
     benchmark_multiple_tasks_and_optimizers(
         task_names=[
-            # "cylinder_push",
-            # "cartpole",
-            # "fr3_pick",
-            # "g1_manipulation",
-            # "g1_stand",
-            # "go2_walk",
-            # "leap_cube",
-            # "leap_cube_down",
-            # "walker",
-            "spot_yellow_chair",
-            # "spot_yellow_chair_ramp",
+            "spot_box_baseline",  # Use spot_baseline tasks for skill policy (nu=19)
         ],
-        optimizer_names=None,
-        num_episodes=10,
+        optimizer_names=optimizer_names,
+        num_episodes=num_episodes,
         episode_length_s=[
-            # 30.0,  # cylinder_push
-            # 10.0,  # cartpole
-            # 30.0,  # fr3_pick
-            # 30.0,  # g1_manipulation
-            # 30.0,  # g1_stand
-            # 30.0,  # go2_walk
-            # 60.0,  # leap_cube
-            # 60.0,  # leap_cube_down
-            # 10.0,  # walker
-            30.0,  # spot_yellow_chair
-            # 120.0,  # spot_yellow_chair_ramp
+            30.0,  # spot_box_baseline
+        ],
+        viz_dt=0.02,
+        onnx_session_dict=onnx_session_dict,
+    )
+
+def benchmark_sampling(num_episodes: int = 50):
+    optimizer_names = [
+        "cem",
+    ]
+    benchmark_multiple_tasks_and_optimizers(
+        task_names=[
+            "spot_box",
+        ],
+        optimizer_names=optimizer_names,
+        num_episodes=num_episodes,
+        episode_length_s=[
+            30.0,  # spot_box
         ],
         viz_dt=0.02,
     )
+
+if __name__ == "__main__":
+
+    # benchmark_skill_policy(num_episodes=50)
+
+
+    benchmark_sampling(num_episodes=10)

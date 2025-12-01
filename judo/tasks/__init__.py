@@ -18,6 +18,8 @@ from judo.tasks.spot.spot_traffic_cone import SpotTrafficCone, SpotTrafficConeCo
 from judo.tasks.spot.spot_barbell import SpotBarbell, SpotBarbellConfig
 from judo.tasks.spot.spot_table_drag import SpotTableDrag, SpotTableDragConfig
 
+from .spot_baseline import SpotBoxBaseline, SpotBoxBaselineConfig
+
 _registered_tasks: Dict[str, Tuple[Type[Task], Type[TaskConfig]]] = {
     "spot_base": (SpotBase, SpotBaseConfig),
     "spot_box": (SpotBox, SpotBoxConfig),
@@ -33,6 +35,8 @@ _registered_tasks: Dict[str, Tuple[Type[Task], Type[TaskConfig]]] = {
     "leap_cube": (LeapCube, LeapCubeConfig),
     "leap_cube_down": (LeapCubeDown, LeapCubeDownConfig),
     "caltech_leap_cube": (CaltechLeapCube, CaltechLeapCubeConfig),
+    # "spot_locomotion": (SpotLocomotion, SpotLocomotionConfig),
+    "spot_box_baseline": (SpotBoxBaseline, SpotBoxBaselineConfig),
 }
 
 
@@ -79,4 +83,8 @@ __all__ = [
     "SpotBarbellConfig",
     "SpotTableDrag",
     "SpotTableDragConfig",
+    # "SpotLocomotion",
+    # "SpotLocomotionConfig",
+    "SpotBoxBaseline",
+    "SpotBoxBaselineConfig",
 ]
