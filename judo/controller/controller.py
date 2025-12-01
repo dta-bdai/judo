@@ -181,6 +181,11 @@ class Controller:
         # call entrypoint prior to optimization
         self.optimizer.pre_optimization(self.times, new_times)
 
+        # For skill policy optimizer, set current state and model
+        from judo.optimizers.skill_policy import SkillPolicyOptimizer
+        if isinstance(self.optimizer, SkillPolicyOptimizer):
+            self.optimizer.set_current_state(curr_state, self.model)
+
         # run optimization loop
         i = 0
         while i < self.max_opt_iters and not self.optimizer.stop_cond():

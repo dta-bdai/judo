@@ -4,8 +4,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+from mujoco import MjModel, MjData
 
 from judo.utils.indexing import get_pos_indices, get_sensor_indices
+from judo.utils.fields import np_1d_field
 from judo import MODEL_PATH
 from judo.tasks.spot.spot_constants import (
     LEGS_STANDING_POS,
@@ -26,7 +28,16 @@ USE_LEGS = False
 class SpotBoxConfig(SpotBaseConfig):
     """Config for the spot box manipulation task."""
 
-    goal_position: np.ndarray = field(default_factory=lambda: GOAL_POSITIONS().origin)
+    goal_position: np.ndarray = np_1d_field(
+        np.array([0.0, 0.0, 0.254], dtype=np.float64),
+        names=["x", "y", "z"],
+        mins=[-5.0, -5.0, 0.0],
+        maxs=[5.0, 5.0, 1.0],
+        steps=[0.1, 0.1, 0.05],
+        vis_name="box_goal_position",
+        xyz_vis_indices=[0, 1, 2],
+        xyz_vis_defaults=[0.0, 0.0, 0.254],
+    )
     w_orientation: float = 15.0
     w_torso_proximity: float = 0.1
     w_gripper_proximity: float = 4.0
@@ -106,15 +117,36 @@ class SpotBox(SpotBase):
 
     @property
     def reset_pose(self) -> np.ndarray:
-        """Reset pose of robot and object."""
-        radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
-        theta = 2 * np.pi * np.random.rand()
-        object_pos = np.array([radius * np.cos(theta), radius * np.cos(theta)]) + np.random.randn(2)
+        """Reset pose of robot and object.
+
+        Ensures robot and box are at least 0.5m apart.
+        """
+        MIN_DISTANCE = 0.5  # Minimum distance between robot and box
+        max_attempts = 100
+
+        # Initialize with defaults
+        base_xy = np.zeros(2)
+        object_pos = np.zeros(2)
+
+        for _ in range(max_attempts):
+            # Sample robot base position
+            base_xy = np.random.randn(2)
+
+            # Sample object position in annulus
+            radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
+            theta = 2 * np.pi * np.random.rand()
+            object_pos = np.array([radius * np.cos(theta), radius * np.sin(theta)]) + 0.1 * np.random.randn(2)
+
+            # Check distance
+            distance = np.linalg.norm(base_xy - object_pos[:2])
+            if distance >= MIN_DISTANCE:
+                break
+
         reset_object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
 
         return np.array(
             [
-                *np.random.randn(2),
+                *base_xy,
                 STANDING_HEIGHT,
                 1,
                 0,
@@ -125,3 +157,9 @@ class SpotBox(SpotBase):
                 *reset_object_pose,
             ]
         )
+
+    def success(self, model: MjModel, data: MjData, config: SpotBoxConfig, metadata: dict[str, Any] | None = None) -> bool:
+        """Check if the box is in the goal position."""
+        object_pos = data.qpos[..., self.object_pose_idx[0:3]]
+        goal_pos = np.array(config.goal_position)
+        return np.linalg.norm(object_pos - goal_pos, axis=-1, ord=np.inf) < 0.5
