@@ -347,10 +347,7 @@ def set_default_spot_box_overrides() -> None:
         {
             "num_nodes": 4,
             "num_rollouts": 32,
-            "use_noise_ramp": True,
-            "noise_ramp": 2.0,
-            "sigma_min": 0.1,
-            "sigma_max": 4.0
+            "use_noise_ramp": False,
         },
     )
     set_config_overrides(

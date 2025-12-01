@@ -554,7 +554,7 @@ def benchmark_multiple_tasks_and_optimizers(
     return all_results
 
 
-def benchmark_skill_policy():
+def benchmark_skill_policy(num_episodes: int = 50):
     optimizer_names = [
         "skill_policy",
     ]
@@ -590,15 +590,15 @@ def benchmark_skill_policy():
             "spot_box_baseline",  # Use spot_baseline tasks for skill policy (nu=19)
         ],
         optimizer_names=optimizer_names,
-        num_episodes=50,
+        num_episodes=num_episodes,
         episode_length_s=[
-            60.0,  # spot_box_baseline
+            30.0,  # spot_box_baseline
         ],
         viz_dt=0.02,
         onnx_session_dict=onnx_session_dict,
     )
 
-def benchmark_sampling():
+def benchmark_sampling(num_episodes: int = 50):
     optimizer_names = [
         "cem",
     ]
@@ -607,17 +607,16 @@ def benchmark_sampling():
             "spot_box",
         ],
         optimizer_names=optimizer_names,
-        num_episodes=50,
+        num_episodes=num_episodes,
         episode_length_s=[
-            60.0,  # spot_box
+            30.0,  # spot_box
         ],
         viz_dt=0.02,
     )
 
 if __name__ == "__main__":
-    import random
-    # random.seed(42)
-    benchmark_skill_policy()
 
-    # np.random.seed(42)
-    benchmark_sampling()
+    # benchmark_skill_policy(num_episodes=50)
+
+
+    benchmark_sampling(num_episodes=10)

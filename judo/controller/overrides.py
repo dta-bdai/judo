@@ -116,6 +116,7 @@ def set_default_spot_box_overrides() -> None:
         "spot_box",
         ControllerConfig,
         {
+            "horizon": 1.0,
             "control_freq": 20.0,
         },
     )
