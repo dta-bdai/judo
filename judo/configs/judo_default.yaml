@@ -1,16 +1,16 @@
 # task: cylinder_push
 # task: spot_base
-task: spot_box_baseline
+# task: spot_box_baseline
 # task: spot_yellow_chair
 # task: spot_yellow_chair_ramp
-# task: spot_crowd_barrier
+task: spot_crowd_barrier
 # task: spot_traffic_cone
 # task: spot_barbell
 # task: spot_table_short
 # task: spot_door_box
 # task: fr3_ball
-optimizer: skill_policy
-# optimizer: cem
+# optimizer: skill_policy
+optimizer: cem
 
 dataflow:
   nodes:

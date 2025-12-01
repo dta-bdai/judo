@@ -14,7 +14,7 @@ from judo.tasks.spot.spot_constants import (
 )
 from judo.tasks.spot.spot_base import GOAL_POSITIONS, SpotBase, SpotBaseConfig
 
-XML_PATH = str(MODEL_PATH / "xml/spot_components/spot_table_short.xml")
+XML_PATH = str(MODEL_PATH / "xml/spot_tasks/spot_table_short.xml")
 
 Z_AXIS = np.array([0.0, 0.0, 1.0])
 TABLE_HEIGHT = 0.51  # Height of the table surface from the ground
