@@ -122,7 +122,7 @@ class SpotBoxBaseline(SpotLocomotion):
         Robot samples near origin, box samples in annulus (1-2m radius).
         """
         # Sample robot base position near origin
-        base_xy = np.random.randn(2)
+        base_xy = np.random.uniform(-0.5, 0.5, 2)
 
         # Sample object position in annulus
         radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()

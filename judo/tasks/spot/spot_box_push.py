@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 from mujoco import MjModel, MjData
 
-from judo.utils.indexing import get_pos_indices, get_sensor_indices
+from judo.utils.indexing import get_pos_indices, get_sensor_indices, get_vel_indices
 from judo.utils.fields import np_1d_field
 from judo import MODEL_PATH
 from judo.tasks.spot.spot_constants import (
@@ -41,7 +41,8 @@ class SpotBoxPushConfig(SpotBaseConfig):
     w_orientation: float = 100.0
     w_torso_proximity: float = 0.1
     w_gripper_proximity: float = 4.0
-    orientation_threshold: float = 0.5
+    w_object_velocity: float = 20.0
+    orientation_threshold: float = 0.7
 
 
 class SpotBoxPush(SpotBase):
@@ -52,6 +53,7 @@ class SpotBoxPush(SpotBase):
 
         self.body_pose_idx = get_pos_indices(self.model, "base")
         self.object_pose_idx = get_pos_indices(self.model, ["box_joint"])
+        self.object_vel_idx = get_vel_indices(self.model, ["box_joint"])
         self.object_y_axis_idx = get_sensor_indices(self.model, "object_y_axis")
         self.end_effector_to_object_idx = get_sensor_indices(self.model, "sensor_arm_link_fngr")
 
@@ -68,9 +70,11 @@ class SpotBoxPush(SpotBase):
         batch_size = states.shape[0]
 
         qpos = states[..., : self.model.nq]
+        qvel = states[..., self.model.nq :]
         body_height = qpos[..., self.body_pose_idx[2]]
         body_pos = qpos[..., self.body_pose_idx[0:3]]
         object_pos = qpos[..., self.object_pose_idx[0:3]]
+        object_linear_velocity = qvel[..., self.object_vel_idx[0:3]]
 
         object_y_axis = sensors[..., self.object_y_axis_idx]
         end_effector_to_object = sensors[..., self.end_effector_to_object_idx]
@@ -83,7 +87,7 @@ class SpotBoxPush(SpotBase):
             object_pos - np.array(config.goal_position)[None, None], axis=-1
         ).mean(-1)
 
-        box_orientation_reward = -config.w_orientation * np.abs(
+        object_orientation_reward = -config.w_orientation * np.abs(
             np.dot(object_y_axis, Z_AXIS) > config.orientation_threshold
         ).sum(axis=-1)
 
@@ -96,67 +100,50 @@ class SpotBoxPush(SpotBase):
             axis=-1,
         ).mean(-1)
 
+        # Compute squared l2 norm of the object velocity.
+        object_linear_velocity_penalty = -config.w_object_velocity * np.square(
+            np.linalg.norm(object_linear_velocity, axis=-1).mean(-1)
+        )
+
         # Compute a velocity penalty to prefer small velocity commands.
         controls_reward = -config.w_controls * np.linalg.norm(controls, axis=-1).mean(-1)
 
         assert spot_fallen_reward.shape == (batch_size,)
         assert goal_reward.shape == (batch_size,)
-        assert box_orientation_reward.shape == (batch_size,)
+        assert object_orientation_reward.shape == (batch_size,)
         assert torso_proximity_reward.shape == (batch_size,)
         assert gripper_proximity_reward.shape == (batch_size,)
+        assert object_linear_velocity_penalty.shape == (batch_size,)
         assert controls_reward.shape == (batch_size,)
 
         return (
             spot_fallen_reward
             + goal_reward
-            + box_orientation_reward
+            + object_orientation_reward
             + torso_proximity_reward
             + gripper_proximity_reward
+            + object_linear_velocity_penalty
             + controls_reward
         )
 
     @property
     def reset_pose(self) -> np.ndarray:
-        """Reset pose of robot and object.
+        """Reset pose of robot and object."""
 
-        Ensures robot and box are at least 0.5m apart.
-        """
-        MIN_DISTANCE = 0.5  # Minimum distance between robot and box
-        max_attempts = 100
+        # Sample object position in annulus
+        radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
+        theta = 2 * np.pi * np.random.rand()
+        object_pos = np.array([radius * np.cos(theta), radius * np.sin(theta)]) + 0.1 * np.random.randn(2)
 
-        # Initialize with defaults
-        base_xy = np.zeros(2)
-        object_pos = np.zeros(2)
+        object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
 
-        for _ in range(max_attempts):
-            # Sample robot base position
-            base_xy = np.random.randn(2)
+        # Place robot at random x and y
+        robot_pose_xy = np.random.uniform(-0.5, 0.5, 2)
+        random_yaw_robot = np.random.uniform(0, 2 * np.pi)
+        robot_pose_orientation = np.array([np.cos(random_yaw_robot / 2), 0, 0, np.sin(random_yaw_robot / 2)])
+        robot_pose = np.array([*robot_pose_xy, STANDING_HEIGHT, *robot_pose_orientation])
 
-            # Sample object position in annulus
-            radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
-            theta = 2 * np.pi * np.random.rand()
-            object_pos = np.array([radius * np.cos(theta), radius * np.sin(theta)]) + 0.1 * np.random.randn(2)
-
-            # Check distance
-            distance = np.linalg.norm(base_xy - object_pos[:2])
-            if distance >= MIN_DISTANCE:
-                break
-
-        reset_object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
-
-        return np.array(
-            [
-                *base_xy,
-                STANDING_HEIGHT,
-                1,
-                0,
-                0,
-                0,
-                *LEGS_STANDING_POS,
-                *self.reset_arm_pos,
-                *reset_object_pose,
-            ]
-        )
+        return np.array([*robot_pose, *LEGS_STANDING_POS, *self.reset_arm_pos, *object_pose])
 
     def success(self, model: MjModel, data: MjData, config: SpotBoxPushConfig, metadata: dict[str, Any] | None = None) -> bool:
         """Check if the box is in the goal position."""
