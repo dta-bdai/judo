@@ -1,8 +1,7 @@
-<mujoco model="spot_yellow_chair">
+<mujoco model="spot_tire_rack">
 <!-- Copyright (c) 2024 Boston Dynamics AI Institute LLC. All rights reserved. -->
   <include file="../spot_components/default.xml" />
   <include file="../spot_components/assets.xml" />
-  <include file="../objects/yellow_chair/yellow_chair_defs.xml" />
   <worldbody>
     <light directional="true" diffuse=".4 .4 .4" specular="0.1 0.1 0.1" pos="0 0 5" dir="0 0 -1" castshadow="false"/>
     <light directional="true" diffuse=".6 .6 .6" specular="0.2 0.2 0.2" pos="0 0 4" dir="0 0 -1"/>
@@ -21,7 +20,8 @@
     
     
   </worldbody>
-  <include file="../objects/yellow_chair/yellow_chair.xml" />
+  
+  <include file="../objects/tire_rack/tire_rack.xml" />
 
   <include file="../spot_components/actuator.xml" />
   <include file="../spot_components/sensor.xml" />
@@ -29,6 +29,6 @@
   <sensor>
     <framepos name="trace_body" objtype="site" objname="site_body"/>
     <framepos name="trace_fngr_site" objtype="site" objname="site_arm_link_fngr"/>
-    <framepos name="trace_chair" objtype="site" objname="trace_yellow_chair"/>
+    <framepos name="trace_tire_rack" objtype="site" objname="trace_tire_rack"/>
   </sensor>
 </mujoco>

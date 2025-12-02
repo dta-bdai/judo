@@ -1,10 +1,10 @@
 <mujoco>
   <!-- Copyright (c) 2025 Boston Dynamics AI Institute LLC. All rights reserved. -->
   <default>
-    <default class="visual">
+    <default class="tire_rack_visual">
       <geom type="mesh" contype="0" conaffinity="0" group="2"/>
     </default>
-    <default class="collision">
+    <default class="tire_rack_collision">
       <geom friction="0.42 0.42" priority="6"/>
     </default>
   </default>
