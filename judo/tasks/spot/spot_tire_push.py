@@ -20,7 +20,7 @@ XML_PATH = str(MODEL_PATH / "xml/spot_tasks/spot_tire.xml")
 
 TIRE_RADIUS: float = 0.339
 TIRE_WIDTH: float = 0.175
-USE_LEGS = True
+USE_LEGS = False
 RADIUS_MIN = 1.0
 RADIUS_MAX = 2.0
 
