@@ -15,6 +15,10 @@
       <geom group="3" friction="0.3" priority="4" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" material="semi_transparent">
       </geom>
     </default>
+    <default class="foot">
+      <geom group="3" friction="1.0" priority="4" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" material="semi_transparent">
+      </geom>
+    </default>
 
     <!-- The arm damping is higher than the damping gains in spot-sim, because actual joint damping is unknown -->
     <default class="arm">
