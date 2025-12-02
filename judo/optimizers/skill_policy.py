@@ -19,7 +19,7 @@ class SkillPolicyConfig(OptimizerConfig):
     rather than sampling and optimizing trajectories.
     """
 
-    onnx_model_path: str | None = "/home/jzhang/Documents/judo-private/scripts/skill_policies/best_skill_policy (1).onnx"
+    onnx_model_path: str | None = "scripts/skill_policies/best_skill_policy (1).onnx"
 
     onnx_session = onnxruntime.InferenceSession(
             str(onnx_model_path),
