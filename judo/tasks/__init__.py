@@ -10,27 +10,27 @@ from judo.tasks.fr3_pick import FR3Pick, FR3PickConfig
 from judo.tasks.leap_cube import LeapCube, LeapCubeConfig
 from judo.tasks.leap_cube_down import LeapCubeDown, LeapCubeDownConfig
 from judo.tasks.spot.spot_base import SpotBase, SpotBaseConfig
-from judo.tasks.spot.spot_box import SpotBox, SpotBoxConfig
+from judo.tasks.spot.spot_box_push import SpotBoxPush, SpotBoxPushConfig
 from judo.tasks.spot.spot_crowd_barrier import SpotCrowdBarrier, SpotCrowdBarrierConfig
 from judo.tasks.spot.spot_yellow_chair import SpotYellowChair, SpotYellowChairConfig
 from judo.tasks.spot.spot_yellow_chair_ramp import SpotYellowChairRamp, SpotYellowChairRampConfig
 from judo.tasks.spot.spot_traffic_cone import SpotTrafficCone, SpotTrafficConeConfig
 from judo.tasks.spot.spot_barbell import SpotBarbell, SpotBarbellConfig
 from judo.tasks.spot.spot_table_drag import SpotTableDrag, SpotTableDragConfig
-from judo.tasks.spot.spot_tire_upright import SpotTireUpright, SpotTireUprightConfig
+from judo.tasks.spot.spot_tire_push import SpotTirePush, SpotTirePushConfig
 
 from .spot_baseline import SpotBoxBaseline, SpotBoxBaselineConfig
 
 _registered_tasks: Dict[str, Tuple[Type[Task], Type[TaskConfig]]] = {
     "spot_base": (SpotBase, SpotBaseConfig),
-    "spot_box": (SpotBox, SpotBoxConfig),
+    "spot_box_push": (SpotBoxPush, SpotBoxPushConfig),
     "spot_yellow_chair": (SpotYellowChair, SpotYellowChairConfig),
     "spot_yellow_chair_ramp": (SpotYellowChairRamp, SpotYellowChairRampConfig),
     "spot_traffic_cone": (SpotTrafficCone, SpotTrafficConeConfig),
     "spot_crowd_barrier": (SpotCrowdBarrier, SpotCrowdBarrierConfig),
     "spot_barbell": (SpotBarbell, SpotBarbellConfig),
     "spot_table_drag": (SpotTableDrag, SpotTableDragConfig),
-    "spot_tire_upright": (SpotTireUpright, SpotTireUprightConfig),
+    "spot_tire_push": (SpotTirePush, SpotTirePushConfig),
     "cylinder_push": (CylinderPush, CylinderPushConfig),
     "cartpole": (Cartpole, CartpoleConfig),
     "fr3_pick": (FR3Pick, FR3PickConfig),
@@ -71,8 +71,8 @@ __all__ = [
     "LeapCubeDownConfig",
     "SpotBase",
     "SpotBaseConfig",
-    "SpotBox",
-    "SpotBoxConfig",
+    "SpotBoxPush",
+    "SpotBoxPushConfig",
     "SpotCrowdBarrier",
     "SpotCrowdBarrierConfig",
     "SpotYellowChair",
@@ -85,8 +85,8 @@ __all__ = [
     "SpotBarbellConfig",
     "SpotTableDrag",
     "SpotTableDragConfig",
-    "SpotTireUpright",
-    "SpotTireUprightConfig",
+    "SpotTirePush",
+    "SpotTirePushConfig",
     # "SpotLocomotion",
     # "SpotLocomotionConfig",
     "SpotBoxBaseline",

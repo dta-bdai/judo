@@ -25,8 +25,8 @@ RADIUS_MAX = 2.0
 USE_LEGS = False
 
 @dataclass
-class SpotBoxConfig(SpotBaseConfig):
-    """Config for the spot box manipulation task."""
+class SpotBoxPushConfig(SpotBaseConfig):
+    """Config for the spot box pushing task."""
 
     goal_position: np.ndarray = np_1d_field(
         np.array([0.0, 0.0, 0.254], dtype=np.float64),
@@ -38,14 +38,14 @@ class SpotBoxConfig(SpotBaseConfig):
         xyz_vis_indices=[0, 1, 2],
         xyz_vis_defaults=[0.0, 0.0, 0.254],
     )
-    w_orientation: float = 15.0
+    w_orientation: float = 100.0
     w_torso_proximity: float = 0.1
     w_gripper_proximity: float = 4.0
     orientation_threshold: float = 0.5
 
 
-class SpotBox(SpotBase):
-    """Task getting Spot to move a box to a desired goal location."""
+class SpotBoxPush(SpotBase):
+    """Task getting Spot to push a box to a desired goal location."""
 
     def __init__(self, model_path: str = XML_PATH) -> None:
         super().__init__(model_path=model_path, use_legs=USE_LEGS)
@@ -61,10 +61,10 @@ class SpotBox(SpotBase):
         states: np.ndarray,
         sensors: np.ndarray,
         controls: np.ndarray,
-        config: SpotBoxConfig,
+        config: SpotBoxPushConfig,
         system_metadata: dict[str, Any] | None = None,
     ) -> np.ndarray:
-        """Reward function for the Spot box moving task."""
+        """Reward function for the Spot box pushing task."""
         batch_size = states.shape[0]
 
         qpos = states[..., : self.model.nq]
@@ -158,7 +158,7 @@ class SpotBox(SpotBase):
             ]
         )
 
-    def success(self, model: MjModel, data: MjData, config: SpotBoxConfig, metadata: dict[str, Any] | None = None) -> bool:
+    def success(self, model: MjModel, data: MjData, config: SpotBoxPushConfig, metadata: dict[str, Any] | None = None) -> bool:
         """Check if the box is in the goal position."""
         object_pos = data.qpos[..., self.object_pose_idx[0:3]]
         goal_pos = np.array(config.goal_position)
