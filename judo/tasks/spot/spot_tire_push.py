@@ -156,3 +156,8 @@ class SpotTirePush(SpotBase):
         position_check = np.linalg.norm(object_pos - goal_pos, axis=-1, ord=np.inf) < POSITION_TOLERANCE
         velocity_check = np.linalg.norm(object_vel, axis=-1) < VELOCITY_TOLERANCE
         return position_check and velocity_check
+
+    def failure(self, model: MjModel, data: MjData, config: SpotTirePushConfig, metadata: dict[str, Any] | None = None) -> bool:
+        """Check if Spot has fallen."""
+        body_height = data.qpos[..., self.body_pose_idx[2]]
+        return body_height <= config.spot_fallen_threshold
