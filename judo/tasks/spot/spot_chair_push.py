@@ -25,6 +25,9 @@ DEFAULT_CHAIR_HEIGHT = 0.0
 
 DEFAULT_TORSO_POSITION = np.array([-1.75, 0, STANDING_HEIGHT])
 Z_AXIS = np.array([0.0, 0.0, 1.0])
+# Success condition tolerances
+POSITION_TOLERANCE = 0.1
+VELOCITY_TOLERANCE = 0.05
 
 @dataclass
 class SpotChairPushConfig(SpotBaseConfig):
@@ -143,3 +146,12 @@ class SpotChairPush(SpotBase):
         robot_pose = np.array([*robot_pose_xy, STANDING_HEIGHT, *robot_pose_orientation])
 
         return np.array([*robot_pose, *LEGS_STANDING_POS, *self.reset_arm_pos, *object_pose])
+
+    def success(self, model: MjModel, data: MjData, config: SpotChairPushConfig, metadata: dict[str, Any] | None = None) -> bool:
+        """Check if the chair is in the goal position."""
+        object_pos = data.qpos[..., self.object_pose_idx[0:3]]
+        object_vel = data.qvel[..., self.object_vel_idx[0:3]]
+        goal_pos = np.array(config.goal_position)
+        position_check = np.linalg.norm(object_pos - goal_pos, axis=-1, ord=np.inf) < POSITION_TOLERANCE
+        velocity_check = np.linalg.norm(object_vel, axis=-1) < VELOCITY_TOLERANCE
+        return position_check and velocity_check

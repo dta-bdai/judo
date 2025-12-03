@@ -23,6 +23,9 @@ DEFAULT_BOX_HEIGHT = 0.254
 RADIUS_MIN = 1.0
 RADIUS_MAX = 2.0
 USE_LEGS = False
+# Success condition tolerances
+POSITION_TOLERANCE = 0.1
+VELOCITY_TOLERANCE = 0.05
 
 @dataclass
 class SpotBoxPushConfig(SpotBaseConfig):
@@ -148,5 +151,8 @@ class SpotBoxPush(SpotBase):
     def success(self, model: MjModel, data: MjData, config: SpotBoxPushConfig, metadata: dict[str, Any] | None = None) -> bool:
         """Check if the box is in the goal position."""
         object_pos = data.qpos[..., self.object_pose_idx[0:3]]
+        object_vel = data.qvel[..., self.object_vel_idx[0:3]]
         goal_pos = np.array(config.goal_position)
-        return np.linalg.norm(object_pos - goal_pos, axis=-1, ord=np.inf) < 0.5
+        position_check = np.linalg.norm(object_pos - goal_pos, axis=-1, ord=np.inf) < POSITION_TOLERANCE
+        velocity_check = np.linalg.norm(object_vel, axis=-1) < VELOCITY_TOLERANCE
+        return position_check and velocity_check
