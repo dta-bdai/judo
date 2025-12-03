@@ -515,6 +515,40 @@ def benchmark_multiple_tasks_and_optimizers(
             )
             all_results[task_name][optimizer_name] = results
 
+            # Print results immediately after completion
+            print(f"\n  Results for {task_name} with {optimizer_name}:")
+            print(f"  {'-' * 60}")
+
+            # Compute and display metrics
+            all_tasks = get_registered_tasks()
+            task_cls = all_tasks[task_name][0]
+
+            all_rewards = []
+            all_metrics = {}
+            for episode_results in results:
+                all_rewards.append(episode_results["rewards"])
+                for k, v in episode_results["metrics"].items():
+                    if k not in all_metrics:
+                        all_metrics[k] = []
+                    all_metrics[k].extend(v)
+
+            # Summarize metrics
+            reduced_metrics = task_cls().reduce_metrics(all_metrics)
+
+            all_rewards = np.concatenate(all_rewards)
+            avg_reward = np.mean(all_rewards)
+            print(f"    Average reward: {avg_reward:.4f}")
+            for metric_name, metric_value in reduced_metrics.items():
+                print(f"    {metric_name}: {metric_value:.4f}")
+            num_successes = sum(1 for r in results if r["success"])
+            num_failures = sum(1 for r in results if r["failure"])
+            avg_length = np.mean([r["length"] for r in results])
+            print(f"    Successes: {num_successes}/{len(results)}")
+            print(f"    Failures: {num_failures}/{len(results)}")
+            print(f"    Average episode length: {avg_length:.4f} seconds")
+            print(f"    STD of episode length: {np.std([r['length'] for r in results]):.4f} seconds")
+            print(f"  {'-' * 60}\n")
+
     # save the benchmark results to a file
     filename = f"benchmark_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.h5"
     

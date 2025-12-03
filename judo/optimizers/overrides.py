@@ -358,3 +358,63 @@ def set_default_spot_box_overrides() -> None:
             "num_rollouts": 32,
         },
     )
+
+def set_default_spot_locomotion_overrides() -> None:
+    set_config_overrides(
+        "spot_locomotion",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+    
+def set_default_spot_box_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_box_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+
+def set_default_spot_chair_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_chair_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+
+def set_default_spot_tire_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_tire_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+    
+def set_default_spot_rack_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_rack_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+    
+def set_default_spot_cone_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_cone_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )

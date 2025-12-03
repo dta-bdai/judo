@@ -1,6 +1,7 @@
 # task: cylinder_push
 # task: spot_base
-task: spot_box_push_baseline
+# task: spot_box_push_baseline
+task: spot_locomotion
 # task: spot_chair_push_baseline
 # task: spot_tire_push_baseline
 # task: spot_yellow_chair

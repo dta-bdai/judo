@@ -19,6 +19,12 @@ from judo.optimizers.overrides import (
     set_default_spot_table_drag_overrides,
     set_default_spot_traffic_cone_overrides,
     set_default_spot_box_overrides,
+    set_default_spot_locomotion_overrides,
+    set_default_spot_box_push_baseline_overrides,
+    set_default_spot_chair_push_baseline_overrides,
+    set_default_spot_tire_push_baseline_overrides,
+    set_default_spot_rack_push_baseline_overrides,
+    set_default_spot_cone_push_baseline_overrides,
 )
 from judo.optimizers.ps import PredictiveSampling, PredictiveSamplingConfig
 from judo.optimizers.skill_policy import SkillPolicyOptimizer, SkillPolicyConfig
@@ -35,6 +41,12 @@ set_default_spot_barbell_overrides()
 set_default_spot_table_drag_overrides()
 set_default_spot_traffic_cone_overrides()
 set_default_spot_box_overrides()
+set_default_spot_locomotion_overrides()
+set_default_spot_box_push_baseline_overrides()
+set_default_spot_chair_push_baseline_overrides()
+set_default_spot_tire_push_baseline_overrides()
+set_default_spot_rack_push_baseline_overrides()
+set_default_spot_cone_push_baseline_overrides()
 
 _registered_optimizers: dict[str, tuple[Type[Optimizer], Type[OptimizerConfig]]] = {
     "cem": (CrossEntropyMethod, CrossEntropyMethodConfig),
