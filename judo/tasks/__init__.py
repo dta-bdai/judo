@@ -23,6 +23,8 @@ from judo.tasks.spot.spot_rack_push import SpotRackPush, SpotRackPushConfig
 from judo.tasks.spot.spot_cone_push import SpotConePush, SpotConePushConfig
 
 from .spot_baseline import (
+    SpotLocomotion,
+    SpotLocomotionConfig,
     SpotBoxPushBaseline,
     SpotBoxPushBaselineConfig,
     SpotTirePushBaseline,
@@ -54,7 +56,7 @@ _registered_tasks: Dict[str, Tuple[Type[Task], Type[TaskConfig]]] = {
     "leap_cube": (LeapCube, LeapCubeConfig),
     "leap_cube_down": (LeapCubeDown, LeapCubeDownConfig),
     "caltech_leap_cube": (CaltechLeapCube, CaltechLeapCubeConfig),
-    # "spot_locomotion": (SpotLocomotion, SpotLocomotionConfig),
+    "spot_locomotion": (SpotLocomotion, SpotLocomotionConfig),
     "spot_box_push_baseline": (SpotBoxPushBaseline, SpotBoxPushBaselineConfig),
     "spot_tire_push_baseline": (SpotTirePushBaseline, SpotTirePushBaselineConfig),
     "spot_chair_push_baseline": (SpotChairPushBaseline, SpotChairPushBaselineConfig),
@@ -114,8 +116,8 @@ __all__ = [
     "SpotRackPushConfig",
     "SpotConePush",
     "SpotConePushConfig",
-    # "SpotLocomotion",
-    # "SpotLocomotionConfig",
+    "SpotLocomotion",
+    "SpotLocomotionConfig",
     "SpotBoxPushBaseline",
     "SpotBoxPushBaselineConfig",
     "SpotTirePushBaseline",
