@@ -30,12 +30,20 @@ def benchmark_skill_policy(num_episodes: int = 50):
     # Use spot_baseline tasks, not spot tasks with custom control mapping
     onnx_session_dict = {
         "spot_box_push_baseline": session,
+        "spot_chair_push_baseline": session,
+        "spot_tire_push_baseline": session,
+        "spot_rack_push_baseline": session,
+        "spot_traffic_cone_push_baseline": session,
     }
 
     # Run benchmark
     benchmark_multiple_tasks_and_optimizers(
         task_names=[
             "spot_box_push_baseline",  # Use spot_baseline tasks for skill policy (nu=19)
+            "spot_chair_push_baseline",
+            "spot_tire_push_baseline",
+            "spot_rack_push_baseline",
+            "spot_traffic_cone_push_baseline",
         ],
         optimizer_names=optimizer_names,
         num_episodes=num_episodes,

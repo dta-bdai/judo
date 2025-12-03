@@ -143,7 +143,16 @@ class SkillPolicyOptimizer(Optimizer[SkillPolicyConfig]):
 
         # Extract object state (first object)
         # Try to find box_joint, object_joint, or similar
-        obj_joint_names = ["box_joint", "object_joint", "object", "cube_joint"]
+        obj_joint_names = [
+            "box_joint",
+            "object_joint",
+            "object",
+            "cube_joint",
+            "tire_rubber_joint",
+            "yellow_chair_joint",
+            "tire_rack_joint",
+            "traffic_cone_joint",
+        ]
         obj_pos = np.zeros(3)
         obj_quat = np.array([1.0, 0.0, 0.0, 0.0])
         obj_lin_vel = np.zeros(3)
