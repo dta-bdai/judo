@@ -16,16 +16,22 @@ from judo.tasks.spot_baseline.spot_locomotion import (
     SpotLocomotion,
     SpotLocomotionConfig,
 )
-from judo.utils.indexing import get_pos_indices, get_sensor_indices
+from judo.utils.indexing import get_pos_indices, get_sensor_indices, get_vel_indices
 
-XML_PATH = str(MODEL_PATH / "xml/spot_components/spot_box.xml")
+XML_PATH = str(MODEL_PATH / "xml/spot_tasks/spot_box.xml")
 Z_AXIS = np.array([0.0, 0.0, 1.0])
 RADIUS_MIN = 1.0
 RADIUS_MAX = 2.0
 
+DEFAULT_BOX_HEIGHT = 0.254
+
+# Success condition tolerances
+POSITION_TOLERANCE = 0.2
+VELOCITY_TOLERANCE = 0.05
+
 
 @dataclass
-class SpotBoxBaselineConfig(SpotLocomotionConfig):
+class SpotBoxPushBaselineConfig(SpotLocomotionConfig):
     """Config for the Spot box manipulation task built on locomotion."""
 
     goal_position: np.ndarray = np_1d_field(
@@ -41,14 +47,14 @@ class SpotBoxBaselineConfig(SpotLocomotionConfig):
     w_position: float = 0.0
 
     box_goal_position: np.ndarray = np_1d_field(
-        np.array([0.0, 0.0, 0.254], dtype=np.float64),
+        np.array([0.0, 0.0, DEFAULT_BOX_HEIGHT], dtype=np.float64),
         names=["x", "y", "z"],
         mins=[-5.0, -5.0, 0.0],
         maxs=[5.0, 5.0, 1.0],
         steps=[0.1, 0.1, 0.05],
         vis_name="box_goal_position",
         xyz_vis_indices=[0, 1, 2],
-        xyz_vis_defaults=[0.0, 0.0, 0.254],
+        xyz_vis_defaults=[0.0, 0.0, DEFAULT_BOX_HEIGHT],
     )
 
     w_orientation: float = 15.0
@@ -57,16 +63,17 @@ class SpotBoxBaselineConfig(SpotLocomotionConfig):
     orientation_threshold: float = 0.5
 
 
-class SpotBoxBaseline(SpotLocomotion):
+class SpotBoxPushBaseline(SpotLocomotion):
     """Spot locomotion task augmented with box manipulation rewards."""
 
-    name: str = "spot_box_baseline"
-    config_t: type[SpotBoxBaselineConfig] = SpotBoxBaselineConfig
+    name: str = "spot_box_push_baseline"
+    config_t: type[SpotBoxPushBaselineConfig] = SpotBoxPushBaselineConfig
 
     def __init__(self, model_path: str = XML_PATH, sim_model_path: str | None = None) -> None:
         super().__init__(model_path=model_path, sim_model_path=sim_model_path)
 
         self.object_pose_idx = get_pos_indices(self.model, ["box_joint"])
+        self.object_vel_idx = get_vel_indices(self.model, ["box_joint"])
         self.object_y_axis_idx = get_sensor_indices(self.model, "object_y_axis")
         self.end_effector_to_object_idx = get_sensor_indices(self.model, "sensor_arm_link_fngr")
 
@@ -75,7 +82,7 @@ class SpotBoxBaseline(SpotLocomotion):
         states: np.ndarray,
         sensors: np.ndarray,
         controls: np.ndarray,
-        config: SpotBoxBaselineConfig,
+        config: SpotBoxPushBaselineConfig,
         system_metadata: dict[str, Any] | None = None,
     ) -> np.ndarray:
         """Compose locomotion rewards with box manipulation objectives."""
@@ -117,37 +124,28 @@ class SpotBoxBaseline(SpotLocomotion):
 
     @property
     def reset_pose(self) -> np.ndarray:
-        """Randomized reset pose for robot and box.
-
-        Robot samples near origin, box samples in annulus (1-2m radius).
-        """
-        # Sample robot base position near origin
-        base_xy = np.random.uniform(-0.5, 0.5, 2)
+        """Reset pose of robot and object."""
 
         # Sample object position in annulus
         radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
         theta = 2 * np.pi * np.random.rand()
         object_pos = np.array([radius * np.cos(theta), radius * np.sin(theta)]) + 0.1 * np.random.randn(2)
 
-        reset_object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
+        object_pose = np.array([*object_pos, DEFAULT_BOX_HEIGHT, 1, 0, 0, 0])
 
-        return np.array(
-            [
-                *base_xy,
-                STANDING_HEIGHT,
-                1,
-                0,
-                0,
-                0,
-                *LEGS_STANDING_POS,
-                *self.reset_arm_pos,
-                *reset_object_pose,
-            ]
-        )
+        # Place robot at random x and y
+        robot_pose_xy = np.random.uniform(-0.5, 0.5, 2)
+        random_yaw_robot = np.random.uniform(0, 2 * np.pi)
+        robot_pose_orientation = np.array([np.cos(random_yaw_robot / 2), 0, 0, np.sin(random_yaw_robot / 2)])
+        robot_pose = np.array([*robot_pose_xy, STANDING_HEIGHT, *robot_pose_orientation])
 
+        return np.array([*robot_pose, *LEGS_STANDING_POS, *self.reset_arm_pos, *object_pose])
 
-    def success(self, model: MjModel, data: MjData, config: SpotBoxBaselineConfig, metadata: dict[str, Any] | None = None) -> bool:
+    def success(self, model: MjModel, data: MjData, config: SpotBoxPushBaselineConfig, metadata: dict[str, Any] | None = None) -> bool:
         """Check if the box is in the goal position."""
         object_pos = data.qpos[..., self.object_pose_idx[0:3]]
+        object_vel = data.qvel[..., self.object_vel_idx[0:3]]
         goal_pos = np.array(config.box_goal_position)
-        return np.linalg.norm(object_pos - goal_pos, axis=-1, ord=np.inf) < 0.5
+        position_check = np.linalg.norm(object_pos - goal_pos, axis=-1, ord=np.inf) < POSITION_TOLERANCE
+        velocity_check = np.linalg.norm(object_vel, axis=-1) < VELOCITY_TOLERANCE
+        return position_check and velocity_check

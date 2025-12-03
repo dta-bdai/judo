@@ -26,7 +26,7 @@ DEFAULT_RACK_HEIGHT = 0.3
 DEFAULT_TORSO_POSITION = np.array([-1.75, 0, STANDING_HEIGHT])
 Z_AXIS = np.array([0.0, 0.0, 1.0])
 # Success condition tolerances
-POSITION_TOLERANCE = 0.1
+POSITION_TOLERANCE = 0.2
 VELOCITY_TOLERANCE = 0.05
 
 @dataclass

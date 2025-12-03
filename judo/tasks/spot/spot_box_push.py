@@ -24,7 +24,7 @@ RADIUS_MIN = 1.0
 RADIUS_MAX = 2.0
 USE_LEGS = False
 # Success condition tolerances
-POSITION_TOLERANCE = 0.1
+POSITION_TOLERANCE = 0.2
 VELOCITY_TOLERANCE = 0.05
 
 @dataclass

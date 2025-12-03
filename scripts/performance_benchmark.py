@@ -547,7 +547,7 @@ def benchmark_multiple_tasks_and_optimizers(
         Benchmark results saved to '{filename}'.
 
         To visualize, run:
-            python scripts/visualize_benchmark_results.py {filename}
+            python scripts/visualize_benchmark.py {filename}
         """
     )
     print(print_msg)
