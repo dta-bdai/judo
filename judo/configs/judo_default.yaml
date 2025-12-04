@@ -1,7 +1,7 @@
 # task: cylinder_push
 # task: spot_base
 # task: spot_box_push_baseline
-task: spot_locomotion
+# task: spot_locomotion
 # task: spot_chair_push_baseline
 # task: spot_tire_push_baseline
 # task: spot_yellow_chair
@@ -10,7 +10,7 @@ task: spot_locomotion
 # task: spot_tire_push
 # task: spot_chair_push
 # task: spot_rack_push
-# task: spot_cone_push
+task: spot_cone_push
 # task: spot_traffic_cone
 # task: spot_barbell
 # task: spot_table_short
@@ -108,6 +108,7 @@ node_definitions:
     controller_override_cfg: ${controller_config_overrides}
     optimizer_override_cfg: ${optimizer_config_overrides}
     sim_pause_button: true
+    geom_exclude_substring: ""
   controller:
     _target_: judo.app.controller.ControllerNode
     node_id: controller

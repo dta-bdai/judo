@@ -2,7 +2,7 @@
 <!-- Copyright (c) 2024 Boston Dynamics AI Institute LLC. All rights reserved. -->
   <include file="../spot_components/default.xml" />
   <include file="../spot_components/assets.xml" />
-  <include file="../objects/traffic_cone/traffic_cone_defs.xml" />
+  <!-- <include file="../objects/traffic_cone/traffic_cone_defs.xml" /> -->
 
   <worldbody>
     <light directional="true" diffuse=".4 .4 .4" specular="0.1 0.1 0.1" pos="0 0 5" dir="0 0 -1" castshadow="false"/>
@@ -17,8 +17,9 @@
     </body>
 
     <!-- <include file="../objects/traffic_cone_mesh.xml" /> -->
-    <include file="../objects/traffic_cone/traffic_cone.xml" />
+    
   </worldbody>
+  <include file="../objects/traffic_cone/traffic_cone.xml" />
 
   <include file="../spot_components/actuator.xml" />
   <include file="../spot_components/sensor.xml" />
@@ -42,7 +43,7 @@
     <subtreecom name="base_subtreecom" body="body"/>
     <subtreelinvel name="base_subtreelinvel" body="body"/>
     <subtreeangmom name="base_angmom" body="body"/>
-    
+
     <framepos name="trace_body" objtype="site" objname="site_body"/>
     <framepos name="trace_fngr_site" objtype="site" objname="site_arm_link_fngr"/>
     <framepos name="trace_cone" objtype="site" objname="trace_traffic_cone"/>
