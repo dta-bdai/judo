@@ -128,7 +128,7 @@ def set_default_spot_locomotion_overrides() -> None:
         ControllerConfig,
         {
             "horizon": 1.0,
-            "spline_order": "linear",
+            "spline_order": "cubic",
             "control_freq": 50.0,
         },
     )
@@ -140,7 +140,7 @@ def set_default_spot_box_push_baseline_overrides() -> None:
         ControllerConfig,
         {
             "horizon": 1.0,
-            "spline_order": "linear",
+            "spline_order": "cubic",
             "control_freq": 50.0,
         },
     )
@@ -152,7 +152,7 @@ def set_default_spot_chair_push_baseline_overrides() -> None:
         ControllerConfig,
         {
             "horizon": 1.0,
-            "spline_order": "linear",
+            "spline_order": "cubic",
             "control_freq": 50.0,
         },
     )
@@ -164,7 +164,7 @@ def set_default_spot_tire_push_baseline_overrides() -> None:
         ControllerConfig,
         {
             "horizon": 1.0,
-            "spline_order": "linear",
+            "spline_order": "cubic",
             "control_freq": 50.0,
         },
     )
@@ -176,7 +176,7 @@ def set_default_spot_rack_push_baseline_overrides() -> None:
         ControllerConfig,
         {
             "horizon": 1.0,
-            "spline_order": "linear",
+            "spline_order": "cubic",
             "control_freq": 50.0,
         },
     )
@@ -188,7 +188,7 @@ def set_default_spot_cone_push_baseline_overrides() -> None:
         ControllerConfig,
         {
             "horizon": 1.0,
-            "spline_order": "linear",
+            "spline_order": "cubic",
             "control_freq": 50.0,
         },
     )

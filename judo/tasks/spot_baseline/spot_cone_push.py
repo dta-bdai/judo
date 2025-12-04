@@ -60,7 +60,8 @@ class SpotConePushBaselineConfig(SpotLocomotionConfig):
     w_orientation: float = 15.0
     w_torso_proximity: float = 0.1
     w_gripper_proximity: float = 4.0
-    orientation_threshold: float = 0.5
+    w_object_velocity: float = 20.0
+    orientation_threshold: float = 0.7
 
 
 class SpotConePushBaseline(SpotLocomotion):
@@ -89,9 +90,11 @@ class SpotConePushBaseline(SpotLocomotion):
         locomotion_reward = super().reward(states, sensors, controls, config, system_metadata)
 
         qpos = states[..., : self.model.nq]
+        qvel = states[..., self.model.nq :]
         body_height = qpos[..., self.body_pose_idx[2]]
         body_pos = qpos[..., self.body_pose_idx[0:3]]
         object_pos = qpos[..., self.object_pose_idx[0:3]]
+        object_linear_velocity = qvel[..., self.object_vel_idx[0:3]]
 
         object_y_axis = sensors[..., self.object_y_axis_idx]
         end_effector_to_object = sensors[..., self.end_effector_to_object_idx]
@@ -108,10 +111,14 @@ class SpotConePushBaseline(SpotLocomotion):
         orientation_reward = -config.w_orientation * np.mean(orientation_violation, axis=1)
 
         torso_distance = np.linalg.norm(body_pos - object_pos, axis=-1)
-        torso_proximity = -config.w_torso_proximity * np.mean(torso_distance, axis=1)
+        torso_proximity = config.w_torso_proximity * np.mean(torso_distance, axis=1)
 
         gripper_distance = np.linalg.norm(end_effector_to_object, axis=-1)
         gripper_proximity = -config.w_gripper_proximity * np.mean(gripper_distance, axis=1)
+
+        object_linear_velocity_penalty = -config.w_object_velocity * np.square(
+            np.linalg.norm(object_linear_velocity, axis=-1).mean(-1)
+        )
 
         return (
             locomotion_reward
@@ -120,6 +127,7 @@ class SpotConePushBaseline(SpotLocomotion):
             + orientation_reward
             + torso_proximity
             + gripper_proximity
+            + object_linear_velocity_penalty
         )
 
     @property
