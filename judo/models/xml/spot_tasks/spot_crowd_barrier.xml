@@ -3,8 +3,6 @@
   <include file="../spot_components/default.xml" />
   <include file="../spot_components/assets.xml" />
 
-  <include file="../objects/crowd_barrier/crowd_barrier_defs.xml" />
-
   <worldbody>
     <light directional="true" diffuse=".4 .4 .4" specular="0.1 0.1 0.1" pos="0 0 5" dir="0 0 -1" castshadow="false"/>
     <light directional="true" diffuse=".6 .6 .6" specular="0.2 0.2 0.2" pos="0 0 4" dir="0 0 -1"/>
@@ -17,9 +15,11 @@
       <include file="../spot_components/arm.xml" />
     </body>
 
-    <include file="../objects/crowd_barrier/crowd_barrier.xml" />
+    
     <!-- <include file="../objects/crowd_barrier/crowd_barrier_mesh.xml" /> -->
   </worldbody>
+  
+  <include file="../objects/crowd_barrier/crowd_barrier.xml" />
 
   <include file="../spot_components/actuator.xml" />
   <include file="../spot_components/sensor.xml" />
