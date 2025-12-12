@@ -3,7 +3,7 @@
 
   <compiler angle="radian" assetdir="../../../resources/" autolimits="true"/>
 
-  <option timestep="0.01" solver="Newton" integrator="implicitfast" density="1" cone="elliptic">
+  <option timestep="0.01" solver="Newton" integrator="implicitfast" density="1" cone="elliptic" impratio="100.0">
     <!-- iterations="5" ls_iterations="10" -->
   </option>
 

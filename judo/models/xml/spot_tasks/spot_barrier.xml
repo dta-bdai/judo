@@ -7,7 +7,7 @@
     <light directional="true" diffuse=".4 .4 .4" specular="0.1 0.1 0.1" pos="0 0 5" dir="0 0 -1" castshadow="false"/>
     <light directional="true" diffuse=".6 .6 .6" specular="0.2 0.2 0.2" pos="0 0 4" dir="0 0 -1"/>
 
-    <geom name="ground" type="plane" size="10 10 0.01" class="collision" priority="5" friction="0.7" material="blue_grid"/>
+    <geom name="ground" type="plane" size="10 10 0.01" class="collision" priority="5" friction="1.0" material="blue_grid"/>
 
     <body name="body" pos="0 0 0.7">
       <include file="../spot_components/body.xml" />
@@ -37,6 +37,10 @@
     <!-- Gripper to grasp point sensors (upright task) -->
     <framepos name="sensor_gripper_to_grasp_left" objtype="site" objname="site_arm_link_wr1" reftype="site" refname="site_grasp_upright_left"/>
     <framepos name="sensor_gripper_to_grasp_right" objtype="site" objname="site_arm_link_wr1" reftype="site" refname="site_grasp_upright_right"/>
+
+    <!-- Gripper to grasp point sensors (drag task - uses mid-height sites) -->
+    <framepos name="sensor_gripper_to_grasp_drag_left" objtype="site" objname="site_arm_link_wr1" reftype="site" refname="site_grasp_drag_left"/>
+    <framepos name="sensor_gripper_to_grasp_drag_right" objtype="site" objname="site_arm_link_wr1" reftype="site" refname="site_grasp_drag_right"/>
 
     <!-- Gripper orientation sensors -->
     <framexaxis name="sensor_gripper_x_axis" objtype="site" objname="site_arm_link_wr1"/>
