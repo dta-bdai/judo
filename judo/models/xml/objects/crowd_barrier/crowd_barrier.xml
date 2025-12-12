@@ -126,7 +126,7 @@
             <site name="trace_grasp_right" pos="0.7 0 0.5335" size="0.01"/>
 
             <!-- Trace sites for upright visualization -->
-            <site name="trace_grasp_upright_left" pos="-1 2 0.8" size="0.01"/>
+            <site name="trace_grasp_upright_left" pos="-1.2 0 0.8" size="0.01"/>
             <site name="trace_grasp_upright_right" pos="1.2 0 0.8" size="0.01"/>
 
             <!-- Extended approach sites beyond barrier edges for torso proximity (at ground level) -->

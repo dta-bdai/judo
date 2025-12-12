@@ -11,7 +11,7 @@ from judo.tasks.leap_cube import LeapCube, LeapCubeConfig
 from judo.tasks.leap_cube_down import LeapCubeDown, LeapCubeDownConfig
 from judo.tasks.spot.spot_base import SpotBase, SpotBaseConfig
 from judo.tasks.spot.spot_box_push import SpotBoxPush, SpotBoxPushConfig
-from judo.tasks.spot.spot_crowd_barrier import SpotCrowdBarrier, SpotCrowdBarrierConfig
+from judo.tasks.spot.spot_barrier_upright import SpotBarrierUpright, SpotBarrierUprightConfig
 from judo.tasks.spot.spot_yellow_chair import SpotYellowChair, SpotYellowChairConfig
 from judo.tasks.spot.spot_yellow_chair_ramp import SpotYellowChairRamp, SpotYellowChairRampConfig
 from judo.tasks.spot.spot_traffic_cone import SpotTrafficCone, SpotTrafficConeConfig
@@ -43,7 +43,7 @@ _registered_tasks: Dict[str, Tuple[Type[Task], Type[TaskConfig]]] = {
     "spot_yellow_chair": (SpotYellowChair, SpotYellowChairConfig),
     "spot_yellow_chair_ramp": (SpotYellowChairRamp, SpotYellowChairRampConfig),
     "spot_traffic_cone": (SpotTrafficCone, SpotTrafficConeConfig),
-    "spot_crowd_barrier": (SpotCrowdBarrier, SpotCrowdBarrierConfig),
+    "spot_barrier_upright": (SpotBarrierUpright, SpotBarrierUprightConfig),
     "spot_barbell": (SpotBarbell, SpotBarbellConfig),
     "spot_table_drag": (SpotTableDrag, SpotTableDragConfig),
     "spot_tire_push": (SpotTirePush, SpotTirePushConfig),
@@ -96,8 +96,8 @@ __all__ = [
     "SpotBaseConfig",
     "SpotBoxPush",
     "SpotBoxPushConfig",
-    "SpotCrowdBarrier",
-    "SpotCrowdBarrierConfig",
+    "SpotBarrierUpright",
+    "SpotBarrierUprightConfig",
     "SpotYellowChair",
     "SpotYellowChairConfig",
     "SpotYellowChairRamp",

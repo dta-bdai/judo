@@ -21,7 +21,10 @@ from judo.tasks.spot.spot_constants import (
     LEG_SOFT_UPPER_JOINT_LIMITS,
     LEGS_STANDING_POS,
     STANDING_HEIGHT_CMD,
-    STANDING_HEIGHT
+    STANDING_HEIGHT,
+    TORSO_CMD_INDS,
+    TORSO_LOWER,
+    TORSO_UPPER,
 )
 
 from judo import MODEL_PATH
@@ -57,21 +60,23 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
     """Flexible base task for Spot locomotion/skills.
 
     Controls are a compact vector mapped to the 25-dim policy command:
-    - Base only:            [base_vel(3)]
-    - Base + Arm:           [base_vel(3), arm_cmd(7)]
-    - Base + Legs:          [base_vel(3), front_leg_cmd(6), leg_selection(1)]
-    - Base + Arm + Legs:    [base_vel(3), arm_cmd(7), front_leg_cmd(6), leg_selection(1)]
+    - Base only:                        [base_vel(3)]
+    - Base + Arm:                       [base_vel(3), arm_cmd(7)]
+    - Base + Legs:                      [base_vel(3), front_leg_cmd(6), leg_selection(1)]
+    - Base + Arm + Legs:                [base_vel(3), arm_cmd(7), front_leg_cmd(6), leg_selection(1)]
+    - With Torso:                       [..., torso_cmd(3)]  (appended to any of the above)
 
     The mapping to the 25-dim policy command is done in task_to_sim_ctrl.
     """
 
     default_backend = "mujoco_spot"  # Use Spot-specific backend
 
-    def __init__(self, model_path: str=XML_PATH, use_arm: bool = True, use_gripper: bool = False, use_legs: bool = False) -> None:
+    def __init__(self, model_path: str=XML_PATH, use_arm: bool = True, use_gripper: bool = False, use_legs: bool = False, use_torso: bool = False) -> None:
         super().__init__(model_path)
         self.use_arm = use_arm
         self.use_gripper = use_gripper
         self.use_legs = use_legs
+        self.use_torso = use_torso
 
         # Selection indices
         self.leg_selection_index = None
@@ -107,21 +112,21 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
         LEG_SELECTION_UPPER = np.ones(1)
         GRIPPER_SELECTION_LOWER = -np.ones(1)
         GRIPPER_SELECTION_UPPER = np.ones(1)
+        TORSO_BOUNDS_LOWER = TORSO_LOWER
+        TORSO_BOUNDS_UPPER = TORSO_UPPER
 
         if not self.use_arm and not self.use_legs:  # Base
-            lower_bound = BASE_LOWER
-            upper_bound = BASE_UPPER
+            lower_components = [BASE_LOWER]
+            upper_components = [BASE_UPPER]
         elif self.use_arm and not self.use_legs:  # Base and arm
             lower_components = [BASE_LOWER, ARM_LOWER]
             upper_components = [BASE_UPPER, ARM_UPPER]
             if self.use_gripper:
                 lower_components.append(GRIPPER_SELECTION_LOWER)
                 upper_components.append(GRIPPER_SELECTION_UPPER)
-            lower_bound = np.concatenate(lower_components)
-            upper_bound = np.concatenate(upper_components)
         elif not self.use_arm and self.use_legs:  # Base and legs
-            lower_bound = np.concatenate((BASE_LOWER, LEGS_LOWER, LEG_SELECTION_LOWER))
-            upper_bound = np.concatenate((BASE_UPPER, LEGS_UPPER, LEG_SELECTION_UPPER))
+            lower_components = [BASE_LOWER, LEGS_LOWER, LEG_SELECTION_LOWER]
+            upper_components = [BASE_UPPER, LEGS_UPPER, LEG_SELECTION_UPPER]
         elif self.use_arm and self.use_legs:  # Base, arm, and legs
             lower_components = [BASE_LOWER, ARM_LOWER]
             upper_components = [BASE_UPPER, ARM_UPPER]
@@ -130,10 +135,16 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
                 upper_components.append(GRIPPER_SELECTION_UPPER)
             lower_components.extend([LEGS_LOWER, LEG_SELECTION_LOWER])
             upper_components.extend([LEGS_UPPER, LEG_SELECTION_UPPER])
-            lower_bound = np.concatenate(lower_components)
-            upper_bound = np.concatenate(upper_components)
         else:
             raise ValueError("Invalid combination of use_arm and use_legs")
+
+        # Add torso if enabled
+        if self.use_torso:
+            lower_components.append(TORSO_BOUNDS_LOWER)
+            upper_components.append(TORSO_BOUNDS_UPPER)
+
+        lower_bound = np.concatenate(lower_components)
+        upper_bound = np.concatenate(upper_components)
 
         return np.stack([lower_bound, upper_bound], axis=-1)
 
@@ -145,31 +156,37 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
 
         if not self.use_arm and not self.use_legs:  # Base
             # Base velocity
-            self.default_command = np.array([0, 0, 0])
-            self.command_mask = np.array(BASE_VEL_CMD_INDS)
+            command_values = [0, 0, 0]
+            command_mask = BASE_VEL_CMD_INDS
         elif self.use_arm and not self.use_legs:  # Base and arm
             # Base velocity, arm joint angles
             command_values = [0, 0, 0, *ARM_UNSTOWED_POS]
+            command_mask = BASE_VEL_CMD_INDS + ARM_CMD_INDS
             if self.use_gripper:
                 command_values.append(0.0)  # gripper selection
                 self.gripper_selection_index = len(command_values) - 1
-            self.default_command = np.array(command_values)
-            self.command_mask = np.array(BASE_VEL_CMD_INDS + ARM_CMD_INDS)
         elif not self.use_arm and self.use_legs:  # Base and legs
             # Base velocity, leg joint angles, leg selection
-            self.default_command = np.array([0, 0, 0, *LEGS_STANDING_POS[0:6], 0])
-            self.command_mask = np.array(BASE_VEL_CMD_INDS + FRONT_LEG_CMD_INDS)
-            self.leg_selection_index = len(self.default_command) - 1
+            command_values = [0, 0, 0, *LEGS_STANDING_POS[0:6], 0]
+            command_mask = BASE_VEL_CMD_INDS + FRONT_LEG_CMD_INDS
+            self.leg_selection_index = len(command_values) - 1
         elif self.use_arm and self.use_legs:  # Base, arm, and legs
             # Base velocity, arm joint angles, leg joint angles, leg selection
             command_values = [0, 0, 0, *ARM_UNSTOWED_POS]
+            command_mask = BASE_VEL_CMD_INDS + ARM_CMD_INDS + FRONT_LEG_CMD_INDS
             if self.use_gripper:
                 command_values.append(0.0)  # gripper selection
                 self.gripper_selection_index = len(command_values) - 1
             command_values.extend([*LEGS_STANDING_POS[0:6], 0])
-            self.default_command = np.array(command_values)
-            self.command_mask = np.array(BASE_VEL_CMD_INDS + ARM_CMD_INDS + FRONT_LEG_CMD_INDS)
-            self.leg_selection_index = len(self.default_command) - 1
+            self.leg_selection_index = len(command_values) - 1
+
+        # Add torso if enabled
+        if self.use_torso:
+            command_values.extend([0, 0, STANDING_HEIGHT])  # roll, pitch, height
+            command_mask = command_mask + TORSO_CMD_INDS
+
+        self.default_command = np.array(command_values)
+        self.command_mask = np.array(command_mask)
 
     def apply_selection_mask(self, controls: np.ndarray) -> np.ndarray:
         """Activate or deactivate leg and gripper commands depending on the selections.
@@ -270,9 +287,12 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
         base_end = 3
         arm_end = base_end + (7 if self.use_arm else 0)
         legs_end = arm_end + (6 if self.use_legs else 0)  # No +1 for selection, already removed
+        torso_end = legs_end + (3 if self.use_torso else 0)
 
         # Base velocity
         out[..., 0:3] = controls[..., 0:base_end]
+
+        # Default torso height (may be overridden below if use_torso)
         out[..., 24] = STANDING_HEIGHT
 
         # Arm commands
@@ -290,6 +310,10 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
             # groups: FL(10:13), FR(13:16), HL(16:19), HR(19:22)
             out[..., 10:13] = fl_cmd
             out[..., 13:16] = fr_cmd
+
+        # Torso commands (roll, pitch, height)
+        if self.use_torso:
+            out[..., 22:25] = controls[..., legs_end:torso_end]
 
         if added_dim:
             out = out.squeeze(axis=0)
