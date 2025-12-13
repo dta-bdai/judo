@@ -47,5 +47,21 @@
     <framepos name="trace_body" objtype="site" objname="site_body"/>
     <framepos name="trace_fngr_site" objtype="site" objname="site_arm_link_fngr"/>
     <framepos name="trace_tire_rack" objtype="site" objname="trace_tire_rack"/>
+
+    <!-- Object orientation sensors -->
+    <framexaxis name="object_x_axis" objtype="body" objname="tire_rack"/>
+
+    <!-- Gripper to grasp point sensor (left_mid for tire rack) -->
+    <framepos name="sensor_gripper_to_grasp_left_mid" objtype="site" objname="site_arm_link_wr1" reftype="site" refname="site_grasp_left_mid"/>
+
+    <!-- Gripper orientation sensors -->
+    <framexaxis name="sensor_gripper_x_axis" objtype="site" objname="site_arm_link_wr1"/>
+    <frameyaxis name="sensor_gripper_y_axis" objtype="site" objname="site_arm_link_wr1"/>
+    <framezaxis name="sensor_gripper_z_axis" objtype="site" objname="site_arm_link_wr1"/>
+
+    <!-- Torso to approach site sensors (three sites for tire rack) -->
+    <framepos name="sensor_torso_to_approach_left" objtype="site" objname="site_body" reftype="site" refname="site_approach_left"/>
+    <framepos name="sensor_torso_to_approach_mid" objtype="site" objname="site_body" reftype="site" refname="site_approach_mid"/>
+    <framepos name="sensor_torso_to_approach_right" objtype="site" objname="site_body" reftype="site" refname="site_approach_right"/>
   </sensor>
 </mujoco>
