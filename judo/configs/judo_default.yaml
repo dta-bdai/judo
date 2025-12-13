@@ -8,7 +8,8 @@
 # task: spot_yellow_chair_ramp
 # task: spot_barrier_drag
 # task: spot_tire_rack_drag
-task: spot_tire_upright
+# task: spot_tire_upright
+task: spot_tire_stack
 # task: spot_tire_push
 # task: spot_chair_push
 # task: spot_rack_push

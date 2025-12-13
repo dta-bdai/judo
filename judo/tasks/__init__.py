@@ -24,6 +24,7 @@ from judo.tasks.spot.spot_rack_push import SpotRackPush, SpotRackPushConfig
 from judo.tasks.spot.spot_cone_push import SpotConePush, SpotConePushConfig
 from judo.tasks.spot.spot_tire_rack_drag import SpotTireRackDrag, SpotTireRackDragConfig
 from judo.tasks.spot.spot_tire_upright import SpotTireUpright, SpotTireUprightConfig
+from judo.tasks.spot.spot_tire_stack import SpotTireStack, SpotTireStackConfig
 
 from .spot_baseline import (
     SpotLocomotion,
@@ -56,6 +57,7 @@ _registered_tasks: Dict[str, Tuple[Type[Task], Type[TaskConfig]]] = {
     "spot_cone_push": (SpotConePush, SpotConePushConfig),
     "spot_tire_rack_drag": (SpotTireRackDrag, SpotTireRackDragConfig),
     "spot_tire_upright": (SpotTireUpright, SpotTireUprightConfig),
+    "spot_tire_stack": (SpotTireStack, SpotTireStackConfig),
     "cylinder_push": (CylinderPush, CylinderPushConfig),
     "cartpole": (Cartpole, CartpoleConfig),
     "fr3_pick": (FR3Pick, FR3PickConfig),
@@ -128,6 +130,8 @@ __all__ = [
     "SpotTireRackDragConfig",
     "SpotTireUpright",
     "SpotTireUprightConfig",
+    "SpotTireStack",
+    "SpotTireStackConfig",
     "SpotLocomotion",
     "SpotLocomotionConfig",
     "SpotBoxPushBaseline",
