@@ -44,8 +44,5 @@
     <framepos name="trace_body" objtype="site" objname="site_body"/>
     <framepos name="trace_fngr_site" objtype="site" objname="site_arm_link_fngr"/>
     <framepos name="trace_tire" objtype="site" objname="trace_tire_rubber"/>
-
-    <!-- Object orientation sensor (y-axis for tire) -->
-    <frameyaxis name="tire_y_axis" objtype="body" objname="tire_rubber" />
   </sensor>
 </mujoco>
