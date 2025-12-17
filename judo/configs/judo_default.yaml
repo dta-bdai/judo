@@ -11,6 +11,7 @@
 # task: spot_tire_upright
 # task: spot_tire_stack
 task: spot_rugged_box_push
+# task: spot_barrier_upright
 # task: spot_tire_push
 # task: spot_chair_push
 # task: spot_rack_push

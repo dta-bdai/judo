@@ -192,3 +192,14 @@ def set_default_spot_cone_push_baseline_overrides() -> None:
             "control_freq": 50.0,
         },
     )
+
+def set_default_spot_rugged_box_push_overrides() -> None:
+    """Sets the default task-specific controller config overrides for the spot rugged box push task."""
+    set_config_overrides(
+        "spot_rugged_box_push",
+        ControllerConfig,
+        {
+            "horizon": 2.0,
+            "spline_order": "cubic",
+        },
+    )

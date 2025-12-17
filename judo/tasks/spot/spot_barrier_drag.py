@@ -41,7 +41,7 @@ class SpotBarrierDragConfig(SpotBaseConfig):
     """Config for the spot barrier dragging task."""
 
     goal_position: np.ndarray = np_1d_field(
-        np.array([-1.0, 1.3, 0.0], dtype=np.float64),
+        np.array([-0.0, 0, 0.0], dtype=np.float64),
         names=["x", "y", "z"],
         mins=[-5.0, -5.0, -1.0],
         maxs=[5.0, 5.0, 2.0],
@@ -285,7 +285,7 @@ class SpotBarrierDrag(SpotBase[SpotBarrierDragConfig]):
     def reset_pose(self) -> np.ndarray:
         """Reset pose of robot and object - barrier starts upright."""
         # Barrier starts upright (no rotation)
-        reset_object_pose = np.array([*DEFAULT_OBJECT_POS, 0.5335, 1, 0, 0, 0])
+        reset_object_pose = np.array([*DEFAULT_OBJECT_POS, 0.035, 1, 0, 0, 0])
 
         return np.array(
             [

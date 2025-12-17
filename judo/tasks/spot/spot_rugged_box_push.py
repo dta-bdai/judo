@@ -41,7 +41,7 @@ class SpotRuggedBoxPushConfig(SpotBaseConfig):
     """Config for the spot rugged box push task."""
 
     goal_position: np.ndarray = np_1d_field(
-        np.array([-1.0, 1.3, 0.0], dtype=np.float64),
+        np.array([-0.0, 0.0, 0.0], dtype=np.float64),
         names=["x", "y", "z"],
         mins=[-5.0, -5.0, -1.0],
         maxs=[5.0, 5.0, 2.0],
@@ -52,12 +52,12 @@ class SpotRuggedBoxPushConfig(SpotBaseConfig):
     )
     w_fence: float = 1000.0
     w_goal: float = 500.0
-    w_orientation: float = 10.0
-    w_torso_proximity: float = 1.0
+    w_orientation: float = 50.0
+    w_torso_proximity: float = 30.0
     w_gripper_proximity: float = 0.1
     w_controls: float = 2.0
     orientation_threshold: float = 0.5
-    torso_distance_from_box: float = 0.8  # Distance from box for desired torso position
+    torso_distance_from_box: float = 0.6  # Distance from box for desired torso position
     torso_desired_height: float = 0.4  # Desired height for torso position
     torso_height_upper_bound: float = 0.4  # Upper bound for torso height control
     position_tolerance: float = 0.2
@@ -82,13 +82,13 @@ class SpotRuggedBoxPush(SpotBase[SpotRuggedBoxPushConfig]):
         self.end_effector_to_object_idx = get_sensor_indices(self.model, "sensor_arm_link_fngr")
 
     @property
-    def actuator_ctrlrange(self) -> np.ndarray:
+    def ctrlrange(self) -> np.ndarray:
         """Control bounds for the task with custom torso height upper bound.
 
         Override to set a lower upper bound for torso height control.
         """
         # Get the base control range from parent class
-        base_ctrlrange = super().actuator_ctrlrange
+        base_ctrlrange = super().ctrlrange
 
         # Modify the torso height upper bound (last element in the upper bound)
         # The torso height is the last element if use_torso is True
@@ -198,7 +198,7 @@ class SpotRuggedBoxPush(SpotBase[SpotRuggedBoxPushConfig]):
         assert controls_reward.shape == (batch_size,)
 
         return (
-            spot_fence_reward
+            # spot_fence_reward
             + spot_fallen_reward
             + goal_reward
             + box_orientation_reward
@@ -207,27 +207,38 @@ class SpotRuggedBoxPush(SpotBase[SpotRuggedBoxPushConfig]):
             + controls_reward
         )
 
+    # @property
+    # def reset_pose(self) -> np.ndarray:
+    #     """Reset pose of robot and object."""
+
+    #     # Sample object position in annulus
+    #     radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
+    #     theta = 2 * np.pi * np.random.rand()
+    #     object_pos = np.array([radius * np.cos(theta), radius * np.sin(theta)]) + 0.1 * np.random.randn(2)
+
+    #     object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
+
+    #     # Place robot at random x and y
+    #     robot_pose_xy = np.random.uniform(-0.5, 0.5, 2)
+    #     random_yaw_robot = np.random.uniform(0, 2 * np.pi)
+    #     robot_pose_orientation = np.array([np.cos(random_yaw_robot / 2), 0, 0, np.sin(random_yaw_robot / 2)])
+    #     robot_pose = np.array([*robot_pose_xy, STANDING_HEIGHT, *robot_pose_orientation])
+
+    #     return np.array([*robot_pose, *LEGS_STANDING_POS, *self.reset_arm_pos, *object_pose])
+
     @property
     def reset_pose(self) -> np.ndarray:
         """Reset pose of robot and object."""
-        radius_robot = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * np.random.rand()
-        theta = 2 * np.pi * np.random.rand()
-        robot_pos = np.array([radius_robot * np.cos(theta), radius_robot * np.sin(theta)])
-        radius_object = np.random.uniform(0.75, 1.25)
-        object_pos = np.array([radius_object * np.cos(theta), radius_object * np.sin(theta)])
-        reset_object_pose = np.array([*object_pos, 0.254, 1, 0, 0, 0])
 
-        return np.array([
-            *robot_pos,
-            STANDING_HEIGHT,
-            1,
-            0,
-            0,
-            0,
-            *LEGS_STANDING_POS,
-            *self.reset_arm_pos,
-            *reset_object_pose,
-        ])
+        object_pos = np.array([0.5,2.0])
+        object_pose = np.array([*object_pos, 0.0, 1, 0, 0, 0])
+
+        # Place robot at random x and y
+        robot_pose_xy = np.array([1.0, 0.0])
+        robot_pose_orientation = np.array([1, 0, 0, 0])
+        robot_pose = np.array([*robot_pose_xy, STANDING_HEIGHT, *robot_pose_orientation])
+
+        return np.array([*robot_pose, *LEGS_STANDING_POS, *self.reset_arm_pos, *object_pose])
 
     def success(self, model: MjModel, data: MjData, config: SpotRuggedBoxPushConfig, metadata: dict[str, Any] | None = None) -> bool:
         """Check if the rugged box has been successfully pushed to the goal position."""

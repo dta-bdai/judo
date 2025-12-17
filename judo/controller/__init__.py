@@ -19,6 +19,7 @@ from judo.controller.overrides import (
     set_default_spot_tire_push_baseline_overrides,
     set_default_spot_rack_push_baseline_overrides,
     set_default_spot_cone_push_baseline_overrides,
+    set_default_spot_rugged_box_push_overrides,
 )
 from judo.utils.assets import download_and_extract_meshes
 
@@ -44,6 +45,7 @@ set_default_spot_chair_push_baseline_overrides()
 set_default_spot_tire_push_baseline_overrides()
 set_default_spot_rack_push_baseline_overrides()
 set_default_spot_cone_push_baseline_overrides()
+set_default_spot_rugged_box_push_overrides()
 
 __all__ = [
     "Controller",

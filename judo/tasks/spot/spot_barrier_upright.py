@@ -46,12 +46,12 @@ class SpotBarrierUprightConfig(SpotBaseConfig):
         xyz_vis_indices=[0, 1, 2],
         xyz_vis_defaults=[-1.0, 1.3, 0.0],
     )
-    w_goal: float = 10.0  # Override base class default
+    w_goal: float = 0.0  # Override base class default
     w_fence: float = 1000.0
     w_orientation: float = 100.0
     orientation_sparsity: float = 3.0
     orientation_threshold: float = 0.7
-    w_gripper_to_grasp_proximity: float = 250.0  # Reward for gripper proximity to grasp points
+    w_gripper_to_grasp_proximity: float = 500.0  # Reward for gripper proximity to grasp points
     w_gripper_orientation: float = 100.0
     w_controls: float = 2.0
     w_object_velocity: float = 10.0
@@ -209,7 +209,7 @@ class SpotBarrierUpright(SpotBase[SpotBarrierUprightConfig]):
         # Position error: actual - commanded
         # Positive error means gripper is MORE OPEN than commanded (being blocked by object)
         position_error = gripper_joint_pos - gripper_joint_cmd
-
+        # print(f"position_error shape: {position_error.shape}")
         # Grasp detection logic:
         # 1. Has resistance: gripper can't reach commanded position
         has_resistance = position_error > config.resistance_threshold
@@ -240,6 +240,8 @@ class SpotBarrierUpright(SpotBase[SpotBarrierUprightConfig]):
         # Reward for successful grasp (based on resistance strength)
         # Higher position_error = stronger resistance = better grasp
         grasp_quality = np.clip(position_error / 0.5, 0, 1)  # Normalize to [0, 1]
+        # print(f"gras_quality shape: {grasp_quality.shape}")
+        # print(f"is_grasping shape: {is_grasping.shape}")
         grasp_quality_reward = config.w_grasp_quality * (is_grasping * grasp_quality).mean(axis=-1)
 
         assert spot_fence_reward.shape == (batch_size,)
@@ -277,7 +279,7 @@ class SpotBarrierUpright(SpotBase[SpotBarrierUprightConfig]):
         # object_pos = np.array([radius * np.cos(theta), radius * np.sin(theta)])
         object_pos = np.array([2.0, 0])
         # Fallen orientation for uprighting task (rotated 90 degrees around y-axis)
-        reset_object_pose = np.array([*object_pos, 1.0, np.cos(np.pi / 4), -np.sin(np.pi / 4), 0, 0])
+        reset_object_pose = np.array([*object_pos, 0.3, np.cos(np.pi / 4), -np.sin(np.pi / 4), 0, 0])
 
         return np.array(
             [

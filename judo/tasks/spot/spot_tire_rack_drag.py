@@ -41,7 +41,7 @@ class SpotTireRackDragConfig(SpotBaseConfig):
     """Config for the spot tire rack dragging task."""
 
     goal_position: np.ndarray = np_1d_field(
-        np.array([-1.0, 1.3, 0.0], dtype=np.float64),
+        np.array([-0.0, 0.0, 0.0], dtype=np.float64),
         names=["x", "y", "z"],
         mins=[-5.0, -5.0, -1.0],
         maxs=[5.0, 5.0, 2.0],
