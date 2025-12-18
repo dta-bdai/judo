@@ -13,7 +13,6 @@ from judo.optimizers.overrides import (
     set_default_fr3_pick_overrides,
     set_default_leap_cube_down_overrides,
     set_default_leap_cube_overrides,
-    set_default_spot_yellow_chair_overrides,
     set_default_spot_yellow_chair_ramp_overrides,
     set_default_spot_barbell_overrides,
     set_default_spot_table_drag_overrides,
@@ -35,7 +34,6 @@ set_default_cylinder_push_overrides()
 set_default_fr3_pick_overrides()
 set_default_leap_cube_overrides()
 set_default_leap_cube_down_overrides()
-set_default_spot_yellow_chair_overrides()
 set_default_spot_yellow_chair_ramp_overrides()
 set_default_spot_barbell_overrides()
 set_default_spot_table_drag_overrides()

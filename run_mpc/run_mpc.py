@@ -23,7 +23,7 @@ class RunMPCConfig:
     init_optimizer: str = "cem"
     visualize: bool = True
     num_episodes: int = 5
-    episode_length_s: float = 10
+    episode_length_s: float = 5
     viz_dt: float = 0.02
     save_results: bool = True
     output_dir: str = "run_mpc/results"
