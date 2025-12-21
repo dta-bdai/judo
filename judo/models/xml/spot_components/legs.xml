@@ -15,7 +15,7 @@
                 <joint name="fl_kn" class="knee" pos="0 0 0" axis="0 1 0" range="-2.7929 -0.2471"/>
                 <geom name="front_left_lower_leg_visual" class="visual" mesh="front_left_lower_leg_visual" material="black"/>
                 <geom name="front_left_lower_leg_collision" type="mesh" class="collision" mesh="left_lower_leg_collision"/>
-                <geom name="front_left_foot_collision" class="collision" type="sphere" size="0.036" pos="0 0 -0.3365"/>
+                <geom name="front_left_foot_collision" class="foot" type="sphere" size="0.036" pos="0 0 -0.3365"/>
                 <site name="site_front_left" pos="0 0 -0.3365" size="0.01"/>
             </body>
         </body>
@@ -36,7 +36,7 @@
                 <joint name="fr_kn" class="knee" pos="0 0 0" axis="0 1 0" range="-2.7929 -0.2471"/>
                 <geom name="front_right_lower_leg_visual" class="visual" mesh="front_right_lower_leg_visual" material="black"/>
                 <geom name="front_right_lower_leg_collision" type="mesh" class="collision" mesh="right_lower_leg_collision"/>
-                <geom name="front_right_foot_collision" class="collision" type="sphere" size="0.036" pos="0 0 -0.3365"/>
+                <geom name="front_right_foot_collision" class="foot" type="sphere" size="0.036" pos="0 0 -0.3365"/>
                 <site name="site_front_right" pos="0 0 -0.3365" size="0.01"/>
             </body>
         </body>
@@ -57,7 +57,7 @@
                 <joint name="hl_kn" class="knee" pos="0 0 0" axis="0 1 0" range="-2.7929 -0.2471"/>
                 <geom name="rear_left_lower_leg_visual" class="visual" mesh="rear_left_lower_leg_visual" material="black"/>
                 <geom name="rear_left_lower_leg_collision" type="mesh" class="collision" mesh="left_lower_leg_collision"/>
-                <geom name="rear_left_foot_collision" class="collision" type="sphere" size="0.036" pos="0 0 -0.3365"/>
+                <geom name="rear_left_foot_collision" class="foot" type="sphere" size="0.036" pos="0 0 -0.3365"/>
                 <site name="site_rear_left" pos="0 0 -0.3365" size="0.01"/>
             </body>
         </body>
@@ -78,7 +78,7 @@
                 <joint name="hr_kn" class="knee" pos="0 0 0" axis="0 1 0" range="-2.7929 -0.2471"/>
                 <geom name="rear_right_lower_leg_visual" class="visual" mesh="rear_right_lower_leg_visual" material="black"/>
                 <geom name="rear_right_lower_leg_collision" type="mesh" class="collision" mesh="right_lower_leg_collision"/>
-                <geom name="rear_right_foot_collision" class="collision" type="sphere" size="0.036" pos="0 0 -0.3365"/>
+                <geom name="rear_right_foot_collision" class="foot" type="sphere" size="0.036" pos="0 0 -0.3365"/>
                 <site name="site_rear_right" pos="0 0 -0.3365" size="0.01"/>
             </body>
         </body>

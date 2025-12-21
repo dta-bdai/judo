@@ -1,4 +1,6 @@
 import datetime
+import json
+import os
 from dataclasses import fields
 from fractions import Fraction
 from functools import reduce
@@ -79,6 +81,115 @@ def summarize_dataclass(dataclass_instance) -> None:  # noqa: ANN001
     for field in fields(dataclass_instance):
         value = getattr(dataclass_instance, field.name)
         print(f"  {field.name}: {value}")
+
+
+def load_benchmark_summary_from_h5(h5_filepath: str) -> dict[str, Any]:
+    """Load benchmark results from H5 file and create a summary dictionary.
+
+    Args:
+        h5_filepath: Path to the H5 file containing benchmark results
+
+    Returns:
+        Dictionary containing summary statistics for each task and optimizer
+    """
+    summary = {}
+
+    with h5py.File(h5_filepath, "r") as f:
+        for task_name in f.keys():
+            summary[task_name] = {}
+            task_group = f[task_name]
+
+            for optimizer_name in task_group.keys():
+                opt_group = task_group[optimizer_name]
+
+                # Collect episode data
+                rewards = []
+                successes = 0
+                failures = 0
+                lengths = []
+                all_metrics = {}
+
+                for episode_name in opt_group.keys():
+                    ep_group = opt_group[episode_name]
+
+                    # Get rewards
+                    episode_rewards = ep_group["rewards"][:]
+                    rewards.append(np.mean(episode_rewards))
+
+                    # Get success/failure/length
+                    successes += int(ep_group.attrs["success"])
+                    failures += int(ep_group.attrs["failure"])
+                    lengths.append(ep_group.attrs["length"])
+
+                    # Get metrics if they exist
+                    if "metrics" in ep_group:
+                        metrics_group = ep_group["metrics"]
+                        for metric_name in metrics_group.keys():
+                            if metric_name not in all_metrics:
+                                all_metrics[metric_name] = []
+                            all_metrics[metric_name].extend(metrics_group[metric_name][:].tolist())
+
+                # Compute reduced metrics (using task's reduce_metrics method if available)
+                reduced_metrics = {}
+                if all_metrics:
+                    try:
+                        all_tasks = get_registered_tasks()
+                        if task_name in all_tasks:
+                            task_cls = all_tasks[task_name][0]
+                            reduced_metrics = task_cls().reduce_metrics(all_metrics)
+                    except Exception:
+                        # If reduce_metrics fails, just compute means
+                        reduced_metrics = {k: float(np.mean(v)) for k, v in all_metrics.items()}
+
+                # Store summary
+                summary[task_name][optimizer_name] = {
+                    "average_reward": float(np.mean(rewards)),
+                    "std_reward": float(np.std(rewards)),
+                    "successes": successes,
+                    "failures": failures,
+                    "num_episodes": len(lengths),
+                    "average_length": float(np.mean(lengths)),
+                    "std_length": float(np.std(lengths)),
+                    "reduced_metrics": reduced_metrics,
+                }
+
+    return summary
+
+
+def print_benchmark_summary(summary: dict[str, Any]) -> None:
+    """Print benchmark summary in a formatted way.
+
+    Args:
+        summary: Summary dictionary from load_benchmark_summary_from_h5 or computed directly
+    """
+    print("Summary of Benchmark Results")
+    print("=" * 80)
+
+    for task_name, optimizers in summary.items():
+        print(f"Task: {task_name}")
+        for optimizer_name, stats in optimizers.items():
+            print(f"  Optimizer: {optimizer_name}")
+            print(f"    Average reward: {stats['average_reward']:.4f}")
+
+            # Print reduced metrics if available
+            if stats.get("reduced_metrics"):
+                for metric_name, metric_value in stats["reduced_metrics"].items():
+                    print(f"    {metric_name}: {metric_value:.4f}")
+
+            print(f"    Successes: {stats['successes']}/{stats['num_episodes']}")
+            print(f"    Failures: {stats['failures']}/{stats['num_episodes']}")
+            print(f"    Average episode length: {stats['average_length']:.4f} seconds")
+            print(f"    STD of episode length: {stats['std_length']:.4f} seconds")
+
+
+def load_and_print_benchmark(h5_filepath: str) -> None:
+    """Load benchmark results from H5 file and print the summary.
+
+    Args:
+        h5_filepath: Path to the H5 file containing benchmark results
+    """
+    summary = load_benchmark_summary_from_h5(h5_filepath)
+    print_benchmark_summary(summary)
 
 
 # ############## #
@@ -515,11 +626,52 @@ def benchmark_multiple_tasks_and_optimizers(
             )
             all_results[task_name][optimizer_name] = results
 
-    # save the benchmark results to a file
-    filename = f"benchmark_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.h5"
-    
+            # Print results immediately after completion
+            print(f"\n  Results for {task_name} with {optimizer_name}:")
+            print(f"  {'-' * 60}")
+
+            # Compute and display metrics
+            all_tasks = get_registered_tasks()
+            task_cls = all_tasks[task_name][0]
+
+            all_rewards = []
+            all_metrics = {}
+            for episode_results in results:
+                all_rewards.append(episode_results["rewards"])
+                for k, v in episode_results["metrics"].items():
+                    if k not in all_metrics:
+                        all_metrics[k] = []
+                    all_metrics[k].extend(v)
+
+            # Summarize metrics
+            reduced_metrics = task_cls().reduce_metrics(all_metrics)
+
+            all_rewards = np.concatenate(all_rewards)
+            avg_reward = np.mean(all_rewards)
+            print(f"    Average reward: {avg_reward:.4f}")
+            for metric_name, metric_value in reduced_metrics.items():
+                print(f"    {metric_name}: {metric_value:.4f}")
+            num_successes = sum(1 for r in results if r["success"])
+            num_failures = sum(1 for r in results if r["failure"])
+            avg_length = np.mean([r["length"] for r in results])
+            print(f"    Successes: {num_successes}/{len(results)}")
+            print(f"    Failures: {num_failures}/{len(results)}")
+            print(f"    Average episode length: {avg_length:.4f} seconds")
+            print(f"    STD of episode length: {np.std([r['length'] for r in results]):.4f} seconds")
+            print(f"  {'-' * 60}\n")
+
+    # Create results directory with timestamp subfolder
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    results_dir = os.path.join("results", timestamp)
+    os.makedirs(results_dir, exist_ok=True)
+
+    # save the benchmark results to files in the timestamped subfolder
+    h5_filename = os.path.join(results_dir, "benchmark_results.h5")
+    json_filename = os.path.join(results_dir, "benchmark_results.json")
+
     if save_results:
-        with h5py.File(filename, "w") as f:
+        # Save H5 file
+        with h5py.File(h5_filename, "w") as f:
             # attributes
             f.attrs["viz_dt"] = viz_dt
 
@@ -540,83 +692,35 @@ def benchmark_multiple_tasks_and_optimizers(
                         for metric_name, metric_values in episode["metrics"].items():
                             metrics_group.create_dataset(metric_name, data=np.asarray(metric_values))
 
+        # Create and save JSON summary
+        summary = load_benchmark_summary_from_h5(h5_filename)
+        with open(json_filename, "w") as f:
+            json.dump(summary, f, indent=2)
+
     # print a summary of the results
-    summarize_benchmark_results(all_results)
-    print_msg = dedent(
-        f"""
-        Benchmark results saved to '{filename}'.
+    # summarize_benchmark_results(all_results)
+    if save_results:
+        print_msg = dedent(
+            f"""
+            Benchmark results saved to:
+            - H5 file: '{h5_filename}'
+            - JSON summary: '{json_filename}'
 
-        To visualize, run:
-            python scripts/visualize_benchmark_results.py {filename}
-        """
-    )
-    print(print_msg)
-    return all_results
+            To visualize, run:
+                python scripts/visualize_benchmark.py {h5_filename}
 
-
-def benchmark_skill_policy(num_episodes: int = 50):
-    optimizer_names = [
-        "skill_policy",
-    ]
-    onnx_session_dict = None
-
-    # Path to the ONNX model (relative to scripts directory)
-    script_dir = Path(__file__).parent
-    onnx_path = script_dir / "skill_policies" / "best_skill_policy (1).onnx"
-
-    if not onnx_path.exists():
-        raise FileNotFoundError(
-            f"ONNX model not found at: {onnx_path}\n"
-            "Please ensure the skill policy model is placed at scripts/skill_policies/best_skill_policy.onnx"
+            To load and print summary:
+                from scripts.performance_benchmark import load_and_print_benchmark
+                load_and_print_benchmark('{h5_filename}')
+            """
         )
+    else:
+        print_msg = dedent(
+            f"""
+            Benchmark results not saved.
+            """
+        )
+    print(print_msg)
 
-    print(f"Loading ONNX model from: {onnx_path}")
-    session = onnxruntime.InferenceSession(
-        str(onnx_path),
-        providers=["CPUExecutionProvider"]
-    )
-    print(f"✓ ONNX model loaded successfully")
-
-    # Map the session to task names
-    # NOTE: Skill policy requires tasks with nu=19 (full joint control)
-    # Use spot_baseline tasks, not spot tasks with custom control mapping
-    onnx_session_dict = {
-        "spot_box_baseline": session,
-    }
-
-    # Run benchmark
-    benchmark_multiple_tasks_and_optimizers(
-        task_names=[
-            "spot_box_baseline",  # Use spot_baseline tasks for skill policy (nu=19)
-        ],
-        optimizer_names=optimizer_names,
-        num_episodes=num_episodes,
-        episode_length_s=[
-            30.0,  # spot_box_baseline
-        ],
-        viz_dt=0.02,
-        onnx_session_dict=onnx_session_dict,
-    )
-
-def benchmark_sampling(num_episodes: int = 50):
-    optimizer_names = [
-        "cem",
-    ]
-    benchmark_multiple_tasks_and_optimizers(
-        task_names=[
-            "spot_box",
-        ],
-        optimizer_names=optimizer_names,
-        num_episodes=num_episodes,
-        episode_length_s=[
-            30.0,  # spot_box
-        ],
-        viz_dt=0.02,
-    )
-
-if __name__ == "__main__":
-
-    # benchmark_skill_policy(num_episodes=50)
-
-
-    benchmark_sampling(num_episodes=10)
+    
+    return all_results

@@ -193,3 +193,5 @@ MUJOCO_LOG.TXT
 
 .vscode/
 *.h5
+
+results/

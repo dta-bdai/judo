@@ -1,6 +1,0 @@
-<mujoco model="crowd_barrier_defs">
-<!-- Copyright (c) 2025 Boston Dynamics AI Institute LLC. All rights reserved. -->
-  <asset>
-      <mesh name="crowd_barrier_mesh" file="../../meshes/barrier/crowd_barrier.obj"/>
-  </asset>
-</mujoco>

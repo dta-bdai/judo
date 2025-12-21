@@ -19,7 +19,7 @@ class SkillPolicyConfig(OptimizerConfig):
     rather than sampling and optimizing trajectories.
     """
 
-    onnx_model_path: str | None = "/home/jzhang/Documents/judo-private/scripts/skill_policies/best_skill_policy (1).onnx"
+    onnx_model_path: str | None = "scripts/skill_policies/best_skill_policy (1).onnx"
 
     onnx_session = onnxruntime.InferenceSession(
             str(onnx_model_path),
@@ -143,7 +143,16 @@ class SkillPolicyOptimizer(Optimizer[SkillPolicyConfig]):
 
         # Extract object state (first object)
         # Try to find box_joint, object_joint, or similar
-        obj_joint_names = ["box_joint", "object_joint", "object", "cube_joint"]
+        obj_joint_names = [
+            "box_joint",
+            "object_joint",
+            "object",
+            "cube_joint",
+            "tire_rubber_joint",
+            "yellow_chair_joint",
+            "tire_rack_joint",
+            "traffic_cone_joint",
+        ]
         obj_pos = np.zeros(3)
         obj_quat = np.array([1.0, 0.0, 0.0, 0.0])
         obj_lin_vel = np.zeros(3)

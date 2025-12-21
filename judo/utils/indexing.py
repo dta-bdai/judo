@@ -113,7 +113,6 @@ def get_pos_indices(model: mujoco.MjModel, joint_name: str | list[str]) -> np.nd
     elif isinstance(joint_name, str):
         joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
         if joint_id == -1:
-            print(model.names)
             raise ValueError(f"Could not find joint named '{joint_name}' in model.")
 
         # Get the starting indices for this joint's DOFs

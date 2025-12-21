@@ -14,7 +14,7 @@ from judo.tasks.spot.spot_constants import (
 )
 from judo.utils.indexing import get_pos_indices, get_sensor_indices, get_vel_indices
 
-XML_PATH = str(MODEL_PATH / "xml/spot_components/spot_trafffic_cone.xml")
+XML_PATH = str(MODEL_PATH / "xml/spot_tasks/spot_traffic_cone.xml")
 
 Z_AXIS = np.array([0.0, 0.0, 1.0])
 RESET_OBJECT_POSE = np.array([3, 0, 0.275, 1, 0, 0, 0])
@@ -46,6 +46,7 @@ class SpotTrafficConeConfig(SpotBaseConfig):
     w_object_velocity: float = 64.0
     position_tolerance: float = 0.2
     orientation_tolerance: float = 0.1
+    velocity_tolerance: float = 0.1
 
 
 class SpotTrafficCone(SpotBase[SpotTrafficConeConfig]):
@@ -179,4 +180,6 @@ class SpotTrafficCone(SpotBase[SpotTrafficConeConfig]):
         orientation_alignment = np.dot(object_z_axis, Z_AXIS)
         orientation_success = orientation_alignment >= (1.0 - config.orientation_tolerance)
 
-        return bool(orientation_success)
+
+        velocity_success = np.linalg.norm(data.qvel[..., self.object_vel_idx[0:3]], axis=-1) < config.velocity_tolerance
+        return bool(orientation_success and velocity_success)

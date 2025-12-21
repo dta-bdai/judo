@@ -1,16 +1,28 @@
 # task: cylinder_push
 # task: spot_base
-task: spot_box_baseline
+# task: spot_box_push_baseline
+# task: spot_locomotion
+# task: spot_chair_push_baseline
+# task: spot_tire_push_baseline
 # task: spot_yellow_chair
 # task: spot_yellow_chair_ramp
-# task: spot_crowd_barrier
+# task: spot_barrier_drag
+# task: spot_tire_rack_drag
+# task: spot_tire_upright
+# task: spot_tire_stack
+task: spot_rugged_box_push
+# task: spot_barrier_upright
+# task: spot_tire_push
+# task: spot_chair_push
+# task: spot_rack_push
+# task: spot_cone_push
 # task: spot_traffic_cone
 # task: spot_barbell
 # task: spot_table_short
 # task: spot_door_box
 # task: fr3_ball
-optimizer: skill_policy
-# optimizer: cem
+# optimizer: skill_policy
+optimizer: cem
 
 dataflow:
   nodes:
@@ -101,6 +113,7 @@ node_definitions:
     controller_override_cfg: ${controller_config_overrides}
     optimizer_override_cfg: ${optimizer_config_overrides}
     sim_pause_button: true
+    geom_exclude_substring: ""
   controller:
     _target_: judo.app.controller.ControllerNode
     node_id: controller

@@ -3,7 +3,7 @@
 
   <compiler angle="radian" assetdir="../../../resources/" autolimits="true"/>
 
-  <option timestep="0.01" solver="Newton" integrator="implicitfast" density="1">
+  <option timestep="0.01" solver="Newton" integrator="implicitfast" density="1" cone="elliptic" impratio="100.0">
     <!-- iterations="5" ls_iterations="10" -->
   </option>
 
@@ -13,6 +13,10 @@
     </default>
     <default class="collision">
       <geom group="3" friction="0.3" priority="4" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" material="semi_transparent">
+      </geom>
+    </default>
+    <default class="foot">
+      <geom group="3" friction="1.0" priority="4" solimp="0.9 0.95 0.001 0.5 2" solref="0.02 1" material="semi_transparent">
       </geom>
     </default>
 

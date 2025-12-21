@@ -225,42 +225,6 @@ def set_default_fr3_pick_overrides() -> None:
     )
 
 
-def set_default_spot_yellow_chair_overrides() -> None:
-    """Sets the default task-specific optimizer config overrides for the spot yellow chair task."""
-    set_config_overrides(
-        "spot_yellow_chair",
-        PredictiveSamplingConfig,
-        {
-            # "num_nodes": 4,
-            "num_rollouts": 16,
-            # "use_noise_ramp": False,
-        },
-    )
-    set_config_overrides(
-        "spot_yellow_chair",
-        CrossEntropyMethodConfig,
-        {
-            "num_nodes": 4,
-            "num_rollouts": 17,
-        },
-    )
-    set_config_overrides(
-        "spot_yellow_chair",
-        MPPIConfig,
-        {
-            "num_nodes": 4,
-            # "num_rollouts": 16,
-        },
-    )
-    set_config_overrides(
-        "spot_yellow_chair",
-        CMAESConfig,
-        {
-            "num_nodes": 4,
-            # "num_rollouts": 16,
-        },
-    )
-
 def set_default_spot_yellow_chair_ramp_overrides() -> None:
     """Sets the default task-specific optimizer config overrides for the spot yellow chair task."""
     set_config_overrides(
@@ -356,5 +320,65 @@ def set_default_spot_box_overrides() -> None:
         {
             "num_nodes": 4,
             "num_rollouts": 32,
+        },
+    )
+
+def set_default_spot_locomotion_overrides() -> None:
+    set_config_overrides(
+        "spot_locomotion",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+    
+def set_default_spot_box_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_box_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+
+def set_default_spot_chair_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_chair_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+
+def set_default_spot_tire_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_tire_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+    
+def set_default_spot_rack_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_rack_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
+        },
+    )
+    
+def set_default_spot_cone_push_baseline_overrides() -> None:
+    set_config_overrides(
+        "spot_cone_push_baseline",
+        CrossEntropyMethodConfig,
+        {
+            "num_nodes": 4,
+            "num_rollouts": 16,
         },
     )

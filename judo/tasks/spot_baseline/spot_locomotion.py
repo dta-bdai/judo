@@ -21,7 +21,7 @@ from judo.tasks.spot_baseline.spot_constants import (
 from judo.utils.fields import np_1d_field
 from judo.gui import slider  
 
-XML_PATH = str(MODEL_PATH / "spot/spot_locomotion.xml")
+XML_PATH = str(MODEL_PATH / "xml/spot_tasks/spot_locomotion.xml")
 
 
 @slider("goal_x", -5.0, 5.0, 0.1)

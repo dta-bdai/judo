@@ -28,7 +28,7 @@ from judo.visualizers.utils import get_trace_sensors
 class ControllerConfig(OverridableConfig):
     """Base controller config."""
 
-    horizon: float = 1.0
+    horizon: float = 1.5
     spline_order: Literal["zero", "linear", "cubic"] = "linear"
     control_freq: float = 20.0
     max_opt_iters: int = 1

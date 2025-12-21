@@ -12,9 +12,9 @@ from judo.optimizers.base import Optimizer, OptimizerConfig
 class CrossEntropyMethodConfig(OptimizerConfig):
     """Configuration for cross-entropy method."""
 
-    sigma_min: float = 0.1
-    sigma_max: float = 1.0
-    num_elites: int = 2
+    sigma_min: float = 0.02
+    sigma_max: float = 0.6
+    num_elites: int = 3
 
 
 class CrossEntropyMethod(Optimizer[CrossEntropyMethodConfig]):

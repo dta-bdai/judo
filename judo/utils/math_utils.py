@@ -117,3 +117,38 @@ def quat_vel(u: np.ndarray, v: np.ndarray, dt: float) -> np.ndarray:
     Source: mariogc.com/post/angular-velocity-quaternions
     """
     return 2.0 * quat_mul(quat_inv(u), (v - u) / dt)[..., 1:]
+
+
+def apply_quat_to_vec(quat: np.ndarray, vec: np.ndarray) -> np.ndarray:
+    """Rotate `vec` by `quat`.
+
+    Parameters
+    ----------
+    quat : array_like, shape (..., 4)
+        Rotation quaternions in **(w, x, y, z)** order.  Any leading batch
+        dimensions are allowed and will be broadcast against `vec`.
+    vec : array_like, shape (..., 3)
+        Vectors to be rotated.  Must be broadcast-compatible with `quat`.
+
+    Returns
+    -------
+    vec_rot : ndarray, shape (..., 3)
+        Rotated vectors, same broadcasted shape as `vec`.
+    """
+    quat = np.asarray(quat, dtype=np.float64)
+    vec = np.asarray(vec, dtype=np.float64)
+
+    # guard against shape mismatch early
+    np.broadcast(quat[..., 0], vec[..., 0])
+
+    # normalise defensively
+    norm = np.linalg.norm(quat, axis=-1, keepdims=True)
+    if np.any(norm == 0):
+        raise ValueError("quaternion has zero length")
+    q = quat / norm
+
+    w = q[..., 0]
+    qv = q[..., 1:]  # (..., 3)
+
+    t = 2.0 * np.cross(qv, vec)  # first cross-product
+    return vec + w[..., None] * t + np.cross(qv, t)

@@ -347,8 +347,8 @@ UPPER_JOINT_LIMITS = np.concatenate((LEG_UPPER_JOINT_LIMITS, ARM_UPPER_JOINT_LIM
 
 LEG_SOFT_LOWER_JOINT_LIMITS = np.array([-0.6, -0.8, -2.7] * LEGS.N_LEGS)
 LEG_SOFT_UPPER_JOINT_LIMITS = np.array([0.6, 1.65, -0.3] * LEGS.N_LEGS)
-ARM_SOFT_LOWER_JOINT_LIMITS = ARM_UNSTOWED_POS - np.array([1.0, 1.0, 0.7, 0.7, 0.7, 0.7, 0])  # closed gripper
-ARM_SOFT_UPPER_JOINT_LIMITS = ARM_UNSTOWED_POS + np.array([0.8, 0.7, 0.7, 0.7, 0.7, 0.7, 0])
+ARM_SOFT_LOWER_JOINT_LIMITS = ARM_UNSTOWED_POS - np.array([1.0, 1.0, 0.8, np.pi / 2, 0.7, np.pi / 4, 0])
+ARM_SOFT_UPPER_JOINT_LIMITS = ARM_UNSTOWED_POS + np.array([1.0, 0.8, 0.6, np.pi / 2, 0.9, np.pi / 4, 0])
 
 # velocity limits
 VELOCITY_TASK_SAFETY_LIMIT: float = 30.0  # Limit when task execution should be stopped
@@ -368,6 +368,11 @@ RL_LOCOMOTION_ACTION_LENGTH = 12
 BASE_VEL_CMD_INDS = [0, 1, 2]
 FRONT_LEG_CMD_INDS = [10, 11, 12, 13, 14, 15]
 ARM_CMD_INDS = [3, 4, 5, 6, 7, 8, 9]
+TORSO_CMD_INDS = [22, 23, 24]
+
+# Torso control limits (roll, pitch, height)
+TORSO_LOWER = np.array([-0.0, -0.5, 0.3])
+TORSO_UPPER = np.array([+0.0, +0.5, 1.0])
 
 # Rollout related
 DEFAULT_SPOT_ROLLOUT_CUTOFF_TIME: float = 0.125  # seconds
