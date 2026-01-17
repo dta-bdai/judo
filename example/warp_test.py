@@ -255,14 +255,6 @@ def main(config: WarpTestConfig) -> None:
     print("data.ctrl: ", data.ctrl)
 
 
-    aa = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-    # Use np.tile to repeat the array, then convert to warp array
-    aa_tiled_np = np.tile(aa, (config.num_worlds, 1, 1))  # Shape: (num_worlds, 2, 3)
-    aa_tile_wp = wp.array(aa_tiled_np, dtype=wp.float32)
-    print("aa_tile_wp shape: ", aa_tile_wp.shape)
-    print("aa_tile_wp: ", aa_tile_wp.numpy())
-
-
     per_thread_physics_time = mj_model.opt.timestep * config.num_steps
     per_thread_rtf = per_thread_physics_time / np.sum(time_vec)
     rtf = per_thread_physics_time * config.num_worlds / np.sum(time_vec)

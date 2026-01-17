@@ -14,7 +14,7 @@ from judo.config import OverridableConfig
 from judo.gui import slider
 from judo.optimizers import Optimizer, OptimizerConfig, get_registered_optimizers
 from judo.tasks import Task, TaskConfig, get_registered_tasks
-from judo.utils.mujoco import RolloutBackend, make_model_data_pairs
+from judo.utils.mujoco_warp import RolloutBackend, make_model_data_pairs
 from judo.utils.normalization import (
     IdentityNormalizer,
     Normalizer,
@@ -67,7 +67,7 @@ class Controller:
         self.model = self.task.model
         self.model_data_pairs = make_model_data_pairs(self.model, self.optimizer_cfg.num_rollouts)
 
-        self.rollout_backend = RolloutBackend(num_threads=self.optimizer_cfg.num_rollouts, backend=rollout_backend)
+        self.rollout_backend = RolloutBackend(model=self.model, num_threads=self.optimizer_cfg.num_rollouts, backend=rollout_backend)
         self.action_normalizer = self._init_action_normalizer()
 
         # a container for any metadata from the system that we want to pass to the task
