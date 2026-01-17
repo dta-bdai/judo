@@ -10,11 +10,6 @@ import warp as wp
 import time
 import numpy as np
 
-# # Import State, Model, Data, nested_kernel from mujoco_warp
-# State = mjw.State
-# Model = mjw.Model
-# Data = mjw.Data
-# nested_kernel = mjw.nested_kernel
 from typing import Optional
 wp.init()
 
@@ -43,151 +38,6 @@ state_integration = [
 ]
 
 
-
-# def set_state(m: mjw.Model, d: mjw.Data, state: wp.array2d(dtype=float), sig: int, active: Optional[wp.array] = None):
-#   """Copy concatenated state components specified by sig from state into Data.
-
-#   The bits of the integer sig correspond to element fields of State.
-
-#   Args:
-#     m: The model containing kinematic and dynamic information (device).
-#     d: The data object containing the current state and output information (device).
-#     state: Concatenation of state components.
-#     sig: Bitflag specifying state components.
-#     active: Per-world bitmask for setting state.
-#   """
-#   if sig >= (1 << State.NSTATE):
-#     raise ValueError(f"invalid state signature {sig} >= 2^mjNSTATE")
-
-#   @nested_kernel(module="unique", enable_backward=False)
-#   def _set_state(
-#     # Model:
-#     nq: int,
-#     nv: int,
-#     nu: int,
-#     na: int,
-#     nbody: int,
-#     neq: int,
-#     nmocap: int,
-#     # In:
-#     sig_in: int,
-#     active_in: wp.array(dtype=bool),
-#     state_in: wp.array2d(dtype=float),
-#     # Data out:
-#     time_out: wp.array(dtype=float),
-#     qpos_out: wp.array2d(dtype=float),
-#     qvel_out: wp.array2d(dtype=float),
-#     act_out: wp.array2d(dtype=float),
-#     qacc_warmstart_out: wp.array2d(dtype=float),
-#     ctrl_out: wp.array2d(dtype=float),
-#     qfrc_applied_out: wp.array2d(dtype=float),
-#     xfrc_applied_out: wp.array2d(dtype=wp.spatial_vector),
-#     eq_active_out: wp.array2d(dtype=bool),
-#     mocap_pos_out: wp.array2d(dtype=wp.vec3),
-#     mocap_quat_out: wp.array2d(dtype=wp.quat),
-#   ):
-#     worldid = wp.tid()
-
-#     if wp.static(active is not None):
-#       if not active_in[worldid]:
-#         return
-
-#     adr = int(0)
-#     for i in range(State.NSTATE.value):
-#       element = 1 << i
-#       if element & sig_in:
-#         if element == State.TIME:
-#           time_out[worldid] = state_in[worldid, adr]
-#           adr += 1
-#         elif element == State.QPOS:
-#           for j in range(nq):
-#             qpos_out[worldid, j] = state_in[worldid, adr + j]
-#           adr += nq
-#         elif element == State.QVEL:
-#           for j in range(nv):
-#             qvel_out[worldid, j] = state_in[worldid, adr + j]
-#           adr += nv
-#         elif element == State.ACT:
-#           for j in range(na):
-#             act_out[worldid, j] = state_in[worldid, adr + j]
-#           adr += na
-#         elif element == State.WARMSTART:
-#           for j in range(nv):
-#             qacc_warmstart_out[worldid, j] = state_in[worldid, adr + j]
-#           adr += nv
-#         elif element == State.CTRL:
-#           for j in range(nu):
-#             ctrl_out[worldid, j] = state_in[worldid, adr + j]
-#           adr += nu
-#         elif element == State.QFRC_APPLIED:
-#           for j in range(nv):
-#             qfrc_applied_out[worldid, j] = state_in[worldid, adr + j]
-#           adr += nv
-#         elif element == State.XFRC_APPLIED:
-#           for j in range(nbody):
-#             xfrc = wp.spatial_vector(
-#               state_in[worldid, adr + 0],
-#               state_in[worldid, adr + 1],
-#               state_in[worldid, adr + 2],
-#               state_in[worldid, adr + 3],
-#               state_in[worldid, adr + 4],
-#               state_in[worldid, adr + 5],
-#             )
-#             xfrc_applied_out[worldid, j] = xfrc
-#             adr += 6
-#         elif element == State.EQ_ACTIVE:
-#           for j in range(neq):
-#             eq_active_out[worldid, j] = bool(state_in[worldid, adr + j])
-#           adr += j
-#         elif element == State.MOCAP_POS:
-#           for j in range(nmocap):
-#             pos = wp.vec3(
-#               state_in[worldid, adr + 1],
-#               state_in[worldid, adr + 0],
-#               state_in[worldid, adr + 2],
-#             )
-#             mocap_pos_out[worldid, j] = pos
-#             adr += 3
-#         elif element == State.MOCAP_QUAT:
-#           for j in range(nmocap):
-#             quat = wp.quat(
-#               state_in[worldid, adr + 0],
-#               state_in[worldid, adr + 1],
-#               state_in[worldid, adr + 2],
-#               state_in[worldid, adr + 3],
-#             )
-#             mocap_quat_out[worldid, j] = quat
-#             adr += 4
-
-#   wp.launch(
-#     _set_state,
-#     dim=d.nworld,
-#     inputs=[
-#       m.nq,
-#       m.nv,
-#       m.nu,
-#       m.na,
-#       m.nbody,
-#       m.neq,
-#       m.nmocap,
-#       int(sig),
-#       active or wp.ones(d.nworld, dtype=bool),
-#       state,
-#     ],
-#     outputs=[
-#       d.time,
-#       d.qpos,
-#       d.qvel,
-#       d.act,
-#       d.qacc_warmstart,
-#       d.ctrl,
-#       d.qfrc_applied,
-#       d.xfrc_applied,
-#       d.eq_active,
-#       d.mocap_pos,
-#       d.mocap_quat,
-#     ],
-#   )
 
 
 
@@ -254,11 +104,9 @@ def main(config: WarpTestConfig) -> None:
     print("data.qvel: ", data.qvel)
     print("data.ctrl: ", data.ctrl)
 
-
     per_thread_physics_time = mj_model.opt.timestep * config.num_steps
     per_thread_rtf = per_thread_physics_time / np.sum(time_vec)
     rtf = per_thread_physics_time * config.num_worlds / np.sum(time_vec)
-
 
     print(f"JIT duration: {jit_duration:.3f} s")
     print(f"Average run duration: {np.mean(time_vec * 1e6):.3f} us")
