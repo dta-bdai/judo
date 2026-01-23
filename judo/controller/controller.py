@@ -1,5 +1,6 @@
-# Copyright (c) 2025 Robotics and AI Institute LLC. All rights reserved.
+# Copyright (c) 2026 Robotics and AI Institute LLC. All rights reserved.
 
+import copy
 import warnings
 from dataclasses import dataclass
 from typing import Literal
@@ -47,7 +48,7 @@ class Controller:
         controller_config: ControllerConfig,
         task: Task,
         optimizer: Optimizer,
-        rollout_backend: Literal["mujoco"] = "mujoco",
+        rollout_backend: Literal["mujoco"] | RolloutBackend = "mujoco",
     ) -> None:
         """Initialize the controller.
 
@@ -67,7 +68,13 @@ class Controller:
         self.model = self.task.model
         self.model_data_pairs = make_model_data_pairs(self.model, self.optimizer_cfg.num_rollouts)
 
-        self.rollout_backend = RolloutBackend(model=self.model, num_threads=self.optimizer_cfg.num_rollouts, backend=rollout_backend)
+        if isinstance(rollout_backend, str):
+            self.rollout_backend = RolloutBackend(
+                model=self.model, num_threads=self.optimizer_cfg.num_rollouts, backend=rollout_backend
+            )
+        else:
+            self.rollout_backend = rollout_backend
+
         self.action_normalizer = self._init_action_normalizer()
 
         # a container for any metadata from the system that we want to pass to the task
@@ -189,7 +196,32 @@ class Controller:
         self.action_normalizer = self._init_action_normalizer()
 
     def update_action(self) -> None:
-        """Abstract method for updating controller actions from current state/time."""
+        """Update controller actions from current state/time.
+
+        This method runs the full optimization loop for a single controller.
+        For batched multi-controller optimization, use BatchedControllers instead.
+        """
+        self._pre_optimization()
+
+        # run optimization loop
+        i = 0
+        while i < self.max_opt_iters and not self.optimizer.stop_cond():
+            self.rollout_controls = self._sample_controls()
+            self._pre_rollout()
+            # Pass 1D x0 - rollout() handles tiling internally for single-problem mode
+            self.states, self.sensors = self.rollout_backend.rollout(
+                self.model_data_pairs,
+                self.current_state,
+                self.rollout_controls,
+            )
+            self._post_rollout()
+            self._update_iteration()
+            i += 1
+
+        self._post_optimization()
+
+    def _pre_optimization(self) -> None:
+        """Setup phase before optimization loop. Called once per update_action."""
         assert self.current_state.shape == (self.model.nq + self.model.nv,), "Current state must be of shape (nq + nv,)"
         assert self.optimizer_cfg.num_rollouts > 0, "Need at least one rollout!"
 
@@ -198,14 +230,15 @@ class Controller:
             self.optimizer_cfg.num_nodes = 4
 
         # Adjust time + move policy forward.
-        new_times = self.time + self.spline_timesteps
-        nominal_knots = self.spline(new_times)
-        nominal_knots_normalized = self.action_normalizer.normalize(nominal_knots)
+        self._new_times = self.time + self.spline_timesteps
+        nominal_knots = self.spline(self._new_times)
+        self._nominal_knots_normalized = self.action_normalizer.normalize(nominal_knots)
 
-        # resizing any variables due to changes in the GUI
-        if len(self.model_data_pairs) != self.optimizer_cfg.num_rollouts:
+        # Resizing rollout backend due to changes in num_rollouts (e.g., from GUI)
+        if self.rollout_backend.num_threads != self.optimizer_cfg.num_rollouts:
             self.model_data_pairs = make_model_data_pairs(self.model, self.optimizer_cfg.num_rollouts)
-            self.rollout_backend.update(self.optimizer_cfg.num_rollouts)
+            # Preserve num_problems when updating shared backend
+            self.rollout_backend.update(self.optimizer_cfg.num_rollouts, self.rollout_backend.num_problems)
 
         normalizer_cls = normalizer_registry.get(self.action_normalizer_type)
         if normalizer_cls is None:
@@ -223,55 +256,57 @@ class Controller:
             self.action_normalizer = self._init_action_normalizer()
 
         # call entrypoint prior to optimization
-        self.optimizer.pre_optimization(self.times, new_times)
+        self.optimizer.pre_optimization(self.times, self._new_times)
 
-        # run optimization loop
-        i = 0
-        while i < self.max_opt_iters and not self.optimizer.stop_cond():
-            # sample controls and clamp to action bounds
-            candidate_knots_normalized = self.optimizer.sample_control_knots(nominal_knots_normalized)
-            candidate_knots_normalized = np.clip(
-                candidate_knots_normalized,
-                self.action_normalizer.normalize(self.task.actuator_ctrlrange[:, 0]),
-                self.action_normalizer.normalize(self.task.actuator_ctrlrange[:, 1]),
-            )
-            self.candidate_knots = self.action_normalizer.denormalize(candidate_knots_normalized)
+    def _sample_controls(self) -> None:
+        """Sample control knots and prepare rollout controls for this iteration."""
+        # sample controls and clamp to action bounds
+        self._candidate_knots_normalized = self.optimizer.sample_control_knots(self._nominal_knots_normalized)
+        self._candidate_knots_normalized = np.clip(
+            self._candidate_knots_normalized,
+            self.action_normalizer.normalize(self.task.actuator_ctrlrange[:, 0]),
+            self.action_normalizer.normalize(self.task.actuator_ctrlrange[:, 1]),
+        )
+        self.candidate_knots = self.action_normalizer.denormalize(self._candidate_knots_normalized)
 
-            # Evaluate rollout controls at sim timesteps.
-            candidate_splines = make_spline(new_times, self.candidate_knots, self.spline_order)
-            self.rollout_controls = candidate_splines(self.time + self.rollout_times)
+        # Evaluate rollout controls at sim timesteps.
+        candidate_splines = make_spline(self._new_times, self.candidate_knots, self.spline_order)
+        rollout_controls = candidate_splines(self.time + self.rollout_times)
+        return rollout_controls
 
-            # Roll out dynamics with action sequences.
-            self.task.pre_rollout(self.current_state)
-            self.states, self.sensors = self.rollout_backend.rollout(
-                self.model_data_pairs,
-                self.current_state,
-                self.rollout_controls,
-            )
-            self.task.post_rollout(
-                self.states,
-                self.sensors,
-                self.rollout_controls,
-                self.system_metadata,
-            )
-            self.rewards = self.task.reward(
-                self.states,
-                self.sensors,
-                self.rollout_controls,
-                self.system_metadata,
-            )
+    def _pre_rollout(self) -> None:
+        """Pre-rollout phase: prepare task for rollout."""
+        self.task.pre_rollout(self.current_state)
 
-            # Update nominal knots for next optimization iteration
-            nominal_knots_normalized = self.optimizer.update_nominal_knots(candidate_knots_normalized, self.rewards)
+    def _post_rollout(self) -> None:
+        """Post-rollout phase: process rollout results and compute rewards."""
+        self.task.post_rollout(
+            self.states,
+            self.sensors,
+            self.rollout_controls,
+            self.system_metadata,
+        )
+        self.rewards = self.task.reward(
+            self.states,
+            self.sensors,
+            self.rollout_controls,
+            self.system_metadata,
+        )
 
-            # Update action normalizer
-            self.action_normalizer.update(self.candidate_knots)
+    def _update_iteration(self) -> None:
+        """Update phase: update nominal knots and normalizer for next iteration."""
+        # Update nominal knots for next optimization iteration
+        self._nominal_knots_normalized = self.optimizer.update_nominal_knots(
+            self._candidate_knots_normalized, self.rewards
+        )
+        # Update action normalizer
+        self.action_normalizer.update(self.candidate_knots)
 
-            i += 1
-
+    def _post_optimization(self) -> None:
+        """Finalization phase after optimization loop. Called once per update_action."""
         # Update nominal controls and spline.
-        self.nominal_knots = self.action_normalizer.denormalize(nominal_knots_normalized)
-        self.times = new_times
+        self.nominal_knots = self.action_normalizer.denormalize(self._nominal_knots_normalized)
+        self.times = self._new_times
         self.update_spline(self.times, self.nominal_knots)
         self.update_traces()
 
@@ -353,6 +388,156 @@ class Controller:
         return make_normalizer(self.action_normalizer_type, self.model.nu, **action_normalizer_kwargs)
 
 
+class BatchedControllers:
+    """Coordinates multiple controllers sharing a single RolloutBackend.
+
+    This class manages batched rollouts across multiple controllers, executing
+    a single GPU rollout for all controllers at each optimization iteration.
+
+    Usage:
+        # Create shared backend with num_threads per problem and num_problems
+        num_rollouts = 64  # rollouts per controller
+        num_problems = 3   # number of controllers
+        backend = RolloutBackend(model, num_threads=num_rollouts, num_problems=num_problems)
+
+        # Create controllers sharing the backend
+        controllers = [
+            Controller(config, task1, opt1, rollout_backend=backend),
+            Controller(config, task2, opt2, rollout_backend=backend),
+            Controller(config, task3, opt3, rollout_backend=backend),
+        ]
+
+        # Create batched controller coordinator
+        batched = BatchedControllers(controllers, backend)
+
+        # Update all controllers with batched rollouts
+        batched.update_action()
+    """
+
+    def __init__(
+        self,
+        controller_config: ControllerConfig,
+        task: Task,
+        optimizer: Optimizer,
+        rollout_backend: RolloutBackend,
+    ) -> None:
+        """Initialize the batched controllers.
+
+        Args:
+            controller_config: Configuration for all controllers.
+            task: Template task instance (new instances created from its class and model_path).
+            optimizer: Template optimizer instance (deep copied for each controller).
+            rollout_backend: The shared RolloutBackend instance. Should be initialized with
+                num_problems equal to len(controllers).
+        """
+        self.num_problems = rollout_backend.num_problems
+        self.controllers = []
+        for _ in range(self.num_problems):
+            # Create new task instance from the task class and model path
+            # (MjSpec can't be deep copied, so we instantiate fresh)
+            new_task = task.__class__(model_path=task.model_path)
+            new_task.config = copy.deepcopy(task.config)
+            controller = Controller(
+                controller_config=controller_config,
+                task=new_task,
+                optimizer=copy.deepcopy(optimizer),
+                rollout_backend=rollout_backend,
+            )
+            self.controllers.append(controller)
+        self.rollout_backend = rollout_backend
+
+        # Validate that all controllers use the shared backend
+        for i, ctrl in enumerate(self.controllers):
+            if ctrl.rollout_backend is not rollout_backend:
+                raise ValueError(
+                    f"Controller {i} does not use the shared rollout_backend. "
+                    "All controllers must share the same RolloutBackend instance."
+                )
+
+        # Validate num_problems matches number of controllers
+        if rollout_backend.num_problems != len(self.controllers):
+            raise ValueError(
+                f"RolloutBackend num_problems ({rollout_backend.num_problems}) does not match "
+                f"number of controllers ({len(self.controllers)}). "
+                f"Initialize backend with num_problems={len(self.controllers)}."
+            )
+
+    def update_action(self) -> None:
+        """Update all controllers with coordinated batched rollouts.
+
+        This method runs the optimization loop across all controllers,
+        batching their rollouts into a single GPU execution per iteration.
+        """
+        # Pre-optimization for all controllers
+        for ctrl in self.controllers:
+            ctrl._pre_optimization()
+
+        # Run optimization loop - all controllers iterate together
+        max_iters = min(ctrl.max_opt_iters for ctrl in self.controllers)
+        for _ in range(max_iters):
+            # Sample controls for all controllers
+            for ctrl in self.controllers:
+                ctrl.rollout_controls = ctrl._sample_controls()
+
+            # Pre-rollout for all controllers
+            for ctrl in self.controllers:
+                ctrl._pre_rollout()
+
+            # Execute batched rollout for all controllers
+            self._execute_batched_rollout()
+
+            # Post-rollout and update for all controllers
+            for ctrl in self.controllers:
+                ctrl._post_rollout()
+                ctrl._update_iteration()
+
+        # Post-optimization for all controllers
+        for ctrl in self.controllers:
+            ctrl._post_optimization()
+
+    def _execute_batched_rollout(self) -> None:
+        """Execute a single batched rollout for all controllers."""
+        # Collect x0 from all controllers: shape (num_problems, x0_dim)
+        # rollout() will internally repeat each row num_threads times
+        x0_stacked = np.stack([ctrl.current_state for ctrl in self.controllers], axis=0)
+
+        # Collect controls from all controllers: shape (num_problems * num_threads, horizon, nu)
+        controls_batched = np.concatenate([ctrl.rollout_controls for ctrl in self.controllers], axis=0)
+
+        # Execute the batched rollout
+        # x0_stacked: (num_problems, x0_dim) -> internally becomes (num_problems * num_threads, x0_dim)
+        # controls_batched: (num_problems * num_threads, horizon, nu)
+        all_states, all_sensors = self.rollout_backend.rollout(
+            self.controllers[0].model_data_pairs,
+            x0_stacked,
+            controls_batched,
+        )
+
+        # Distribute results back to each controller
+        num_threads = self.rollout_backend.num_threads
+        for i, ctrl in enumerate(self.controllers):
+            start_idx = i * num_threads
+            end_idx = (i + 1) * num_threads
+            ctrl.states = all_states[start_idx:end_idx]
+            ctrl.sensors = all_sensors[start_idx:end_idx]
+
+    def reset(self) -> None:
+        """Reset all controllers."""
+        for ctrl in self.controllers:
+            ctrl.reset()
+
+    def update_states(self, state_msgs: list) -> None:
+        """Update states for all controllers.
+
+        Args:
+            state_msgs: List of MujocoState messages, one per controller.
+        """
+        if len(state_msgs) != len(self.controllers):
+            raise ValueError(f"Expected {len(self.controllers)} state messages, got {len(state_msgs)}")
+        for ctrl, state_msg in zip(self.controllers, state_msgs, strict=False):
+            ctrl.update_states(state_msg)
+
+
 def make_spline(times: np.ndarray, controls: np.ndarray, spline_order: str) -> interp1d:
     """Helper function for creating spline objects.
 
@@ -382,7 +567,19 @@ def make_controller(
     optimizer_registration_cfg: DictConfig | None = None,
     rollout_backend: Literal["mujoco"] = "mujoco",
 ) -> Controller:
-    """Make a controller."""
+    """Make a controller.
+
+    Args:
+        init_task: The task name to use.
+        init_optimizer: The optimizer name to use.
+        task_registration_cfg: Optional task registration config.
+        optimizer_registration_cfg: Optional optimizer registration config.
+        rollout_backend: Either a backend type string ("mujoco") to create a new backend,
+            or an existing RolloutBackend instance to share with other controllers.
+
+    Returns:
+        The created Controller instance.
+    """
     available_optimizers = get_registered_optimizers()
     available_tasks = get_registered_tasks()
     if task_registration_cfg is not None:
