@@ -1,6 +1,5 @@
 # Copyright (c) 2026 Robotics and AI Institute LLC. All rights reserved.
 
-import time
 import warnings
 from typing import Literal
 
@@ -8,6 +7,8 @@ import mujoco_warp as mjw
 import numpy as np
 import warp as wp
 from mujoco import MjData, MjModel
+
+from judo.utils.timer import Timer
 
 # TODO:
 # do a proper rollout function in mjw_test
@@ -43,6 +44,11 @@ class RolloutBackend:
             self.setup_mujoco_backend(model, num_threads, num_problems)
         else:
             raise ValueError(f"Unknown backend: {self.backend}")
+
+        # Initialize timers for performance measurement
+        self.timer_cpu_to_gpu = Timer("CPU->GPU", unit="ms")
+        self.timer_rollout = Timer("Rollout ", unit="ms")
+        self.timer_gpu_to_cpu = Timer("GPU->CPU", unit="ms")
 
         warnings.warn(
             "Field has no default value to reset to and no override for key. Its current value remains unchanged.",
@@ -114,10 +120,8 @@ class RolloutBackend:
 
         num_worlds = x0_batched.shape[0]
 
-        # Prepare full states with time
-        full_states = np.concatenate([time.time() * np.ones((num_worlds, 1)), x0_batched], axis=-1)
-        full_states_wp = wp.array(full_states, dtype=wp.float32)
-        controls_wp = wp.array(controls, dtype=wp.float32)
+        # Prepare full states with time (use 0.0 as placeholder time)
+        full_states = np.concatenate([np.zeros((num_worlds, 1)), x0_batched], axis=-1)
 
         assert full_states.shape[-1] == nq + nv + 1
         assert full_states.ndim == 2
@@ -125,19 +129,27 @@ class RolloutBackend:
         assert controls.shape[-1] == nu
         assert controls.shape[0] == num_worlds
 
-        # Pre-allocate GPU output buffers
-        out_time_wp = wp.zeros((num_worlds, horizon, 1), dtype=wp.float32)
-        out_qpos_wp = wp.zeros((num_worlds, horizon, nq), dtype=wp.float32)
-        out_qvel_wp = wp.zeros((num_worlds, horizon, nv), dtype=wp.float32)
-        out_sensors_wp = wp.zeros((num_worlds, horizon, nsensordata), dtype=wp.float32)
-
         # Execute rollout
         if self.backend == "mujoco":
+            # CPU -> GPU copy
+            self.timer_cpu_to_gpu.tic()
+            full_states_wp = wp.array(full_states, dtype=wp.float32)
+            controls_wp = wp.array(controls, dtype=wp.float32)
+
+            # Pre-allocate GPU output buffers
+            out_time_wp = wp.zeros((num_worlds, horizon, 1), dtype=wp.float32)
+            out_qpos_wp = wp.zeros((num_worlds, horizon, nq), dtype=wp.float32)
+            out_qvel_wp = wp.zeros((num_worlds, horizon, nv), dtype=wp.float32)
+            out_sensors_wp = wp.zeros((num_worlds, horizon, nsensordata), dtype=wp.float32)
+
             wp.copy(self.mjw_data.time, full_states_wp[:, 0])
             wp.copy(self.mjw_data.qpos, full_states_wp[:, 1 : nq + 1])
             wp.copy(self.mjw_data.qvel, full_states_wp[:, 1 + nq : nq + nv + 1])
+            wp.synchronize()
+            self.timer_cpu_to_gpu.toc()
 
-            t5 = time.time()
+            # GPU rollout loop
+            self.timer_rollout.tic()
             for t in range(horizon):
                 # Set control - use wp.copy() for speed (no kernel recompilation)
                 wp.copy(self.mjw_data.ctrl, controls_wp[:, t, :])
@@ -153,17 +165,16 @@ class RolloutBackend:
 
             # Single sync at the end of rollout
             wp.synchronize()
-            t6 = time.time()
-            print(f"Time for rollout loop ({num_worlds} worlds): {(t6 - t5) * 1e6:.3f} us")
+            self.timer_rollout.toc()
 
-            # Copy from GPU to CPU
+            # GPU -> CPU copy
+            self.timer_gpu_to_cpu.tic()
             out_states = np.zeros((num_worlds, horizon, nq + nv + 1), dtype=np.float32)
             out_states[:, :, :1] = out_time_wp.numpy()
             out_states[:, :, 1 : nq + 1] = out_qpos_wp.numpy()
             out_states[:, :, nq + 1 : nq + nv + 1] = out_qvel_wp.numpy()
             out_sensors = out_sensors_wp.numpy()
-            t7 = time.time()
-            print(f"Time to copy results to CPU: {(t7 - t6) * 1e6:.3f} us")
+            self.timer_gpu_to_cpu.toc()
         else:
             raise ValueError(f"Unknown backend: {self.backend}")
 
@@ -176,3 +187,15 @@ class RolloutBackend:
             self.setup_mujoco_backend(self.model, num_threads, num_problems)
         else:
             raise ValueError(f"Unknown backend: {self.backend}")
+
+    def print_timer_stats(self) -> None:
+        """Print timing statistics for all rollout operations."""
+        self.timer_cpu_to_gpu.print_stats()
+        self.timer_rollout.print_stats()
+        self.timer_gpu_to_cpu.print_stats()
+
+    def reset_timers(self) -> None:
+        """Reset all timing statistics."""
+        self.timer_cpu_to_gpu.reset()
+        self.timer_rollout.reset()
+        self.timer_gpu_to_cpu.reset()
