@@ -16,6 +16,7 @@ from judo.gui import slider
 from judo.optimizers import Optimizer, OptimizerConfig, get_registered_optimizers
 from judo.tasks import Task, TaskConfig, get_registered_tasks
 from judo.utils.mujoco_warp import RolloutBackend, make_model_data_pairs
+from judo.utils.timer import Timer
 from judo.utils.normalization import (
     IdentityNormalizer,
     Normalizer,
@@ -462,6 +463,13 @@ class BatchedControllers:
                 f"Initialize backend with num_problems={len(self.controllers)}."
             )
 
+        # Initialize timers for update_action() breakdown
+        self.timer_sample_controls = Timer("Sample Controls", unit="ms")
+        self.timer_rollout = Timer("Batched Rollout", unit="ms")
+        self.timer_rewards = Timer("Rewards       ", unit="ms")
+        self.timer_update_iter = Timer("Update Iter   ", unit="ms")
+        self.timer_post_opt = Timer("Post Opt      ", unit="ms")
+
     def update_action(self) -> None:
         """Update all controllers with coordinated batched rollouts.
 
@@ -476,24 +484,37 @@ class BatchedControllers:
         max_iters = min(ctrl.max_opt_iters for ctrl in self.controllers)
         for _ in range(max_iters):
             # Sample controls for all controllers
+            self.timer_sample_controls.tic()
             for ctrl in self.controllers:
                 ctrl.rollout_controls = ctrl._sample_controls()
+            self.timer_sample_controls.toc()
 
             # Pre-rollout for all controllers
             for ctrl in self.controllers:
                 ctrl._pre_rollout()
 
             # Execute batched rollout for all controllers
+            self.timer_rollout.tic()
             self._execute_batched_rollout()
+            self.timer_rollout.toc()
 
-            # Post-rollout and update for all controllers
+            # Post-rollout (compute rewards) for all controllers
+            self.timer_rewards.tic()
             for ctrl in self.controllers:
                 ctrl._post_rollout()
+            self.timer_rewards.toc()
+
+            # Update iteration for all controllers
+            self.timer_update_iter.tic()
+            for ctrl in self.controllers:
                 ctrl._update_iteration()
+            self.timer_update_iter.toc()
 
         # Post-optimization for all controllers
+        self.timer_post_opt.tic()
         for ctrl in self.controllers:
             ctrl._post_optimization()
+        self.timer_post_opt.toc()
 
     def _execute_batched_rollout(self) -> None:
         """Execute a single batched rollout for all controllers."""
@@ -525,6 +546,28 @@ class BatchedControllers:
         """Reset all controllers."""
         for ctrl in self.controllers:
             ctrl.reset()
+
+    def print_timer_stats(self) -> None:
+        """Print timing statistics for update_action() breakdown."""
+        self.timer_sample_controls.print_stats()
+        self.timer_rollout.print_stats()
+        self.timer_rewards.print_stats()
+        self.timer_update_iter.print_stats()
+        self.timer_post_opt.print_stats()
+        # Also print rollout backend timers if available
+        if hasattr(self.rollout_backend, "print_timer_stats"):
+            self.rollout_backend.print_timer_stats()
+
+    def reset_timers(self) -> None:
+        """Reset all timers."""
+        self.timer_sample_controls.reset()
+        self.timer_rollout.reset()
+        self.timer_rewards.reset()
+        self.timer_update_iter.reset()
+        self.timer_post_opt.reset()
+        # Also reset rollout backend timers if available
+        if hasattr(self.rollout_backend, "reset_timers"):
+            self.rollout_backend.reset_timers()
 
     def update_states(self, state_msgs: list) -> None:
         """Update states for all controllers.
