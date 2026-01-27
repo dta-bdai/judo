@@ -44,9 +44,10 @@ class LeapCube(Task[LeapCubeConfig]):
         self,
         model_path: str = XML_PATH,
         sim_model_path: str | None = SIM_XML_PATH,
+        config: LeapCubeConfig | None = None,
     ) -> None:
         """Initializes the LEAP cube rotation task."""
-        super().__init__(model_path=model_path, sim_model_path=sim_model_path)
+        super().__init__(model_path=model_path, sim_model_path=sim_model_path, config=config)
         self.goal_pos = np.array([0.0, 0.03, 0.1])
         self.goal_quat = np.array([1.0, 0.0, 0.0, 0.0])
         self.qpos_home = QPOS_HOME

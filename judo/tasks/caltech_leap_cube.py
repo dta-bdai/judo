@@ -34,9 +34,14 @@ class CaltechLeapCube(LeapCube):
     name: str = "caltech_leap_cube"
     config_t: type[CaltechLeapCubeConfig] = CaltechLeapCubeConfig
 
-    def __init__(self, model_path: str = XML_PATH, sim_model_path: str = SIM_XML_PATH) -> None:
+    def __init__(
+        self,
+        model_path: str = XML_PATH,
+        sim_model_path: str = SIM_XML_PATH,
+        config: CaltechLeapCubeConfig | None = None,
+    ) -> None:
         """Initializes the LEAP cube rotation task."""
-        super(LeapCube, self).__init__(model_path=model_path, sim_model_path=sim_model_path)
+        super(LeapCube, self).__init__(model_path, sim_model_path=sim_model_path, config=config)
         self.goal_pos = np.array([0.11, 0.005, 0.03])
         self.goal_quat = np.array([1.0, 0.0, 0.0, 0.0])
         self.qpos_home = QPOS_HOME

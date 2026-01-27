@@ -36,9 +36,14 @@ class LeapCubeDown(LeapCube):
     name: str = "leap_cube_down"
     config_t: type[LeapCubeDownConfig] = LeapCubeDownConfig
 
-    def __init__(self, model_path: str = XML_PATH, sim_model_path: str = SIM_XML_PATH) -> None:
+    def __init__(
+        self,
+        model_path: str = XML_PATH,
+        sim_model_path: str = SIM_XML_PATH,
+        config: LeapCubeDownConfig | None = None,
+    ) -> None:
         """Initializes the LEAP cube rotation task."""
-        super(LeapCube, self).__init__(model_path=model_path, sim_model_path=sim_model_path)
+        super(LeapCube, self).__init__(model_path, sim_model_path=sim_model_path, config=config)
         self.goal_pos = np.array([-0.04, -0.035, -0.065])
         self.goal_quat = np.array([1.0, 0.0, 0.0, 0.0])
         self.qpos_home = QPOS_HOME

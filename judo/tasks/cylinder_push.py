@@ -42,9 +42,14 @@ class CylinderPush(Task[CylinderPushConfig]):
     name: str = "cylinder_push"
     config_t: type[CylinderPushConfig] = CylinderPushConfig
 
-    def __init__(self, model_path: str = XML_PATH, sim_model_path: str | None = None) -> None:
+    def __init__(
+        self,
+        model_path: str = XML_PATH,
+        sim_model_path: str | None = None,
+        config: CylinderPushConfig | None = None,
+    ) -> None:
         """Initializes the cylinder push task."""
-        super().__init__(model_path=model_path, sim_model_path=sim_model_path)
+        super().__init__(model_path=model_path, sim_model_path=sim_model_path, config=config)
         self.reset()
 
     def reward(

@@ -107,9 +107,14 @@ class FR3Pick(Task[FR3PickConfig]):
     name: str = "fr3_pick"
     config_t: type[FR3PickConfig] = FR3PickConfig
 
-    def __init__(self, model_path: str = XML_PATH, sim_model_path: str | None = None) -> None:
+    def __init__(
+        self,
+        model_path: str = XML_PATH,
+        sim_model_path: str | None = None,
+        config: FR3PickConfig | None = None,
+    ) -> None:
         """Initializes the LEAP cube rotation task."""
-        super().__init__(model_path=model_path, sim_model_path=sim_model_path)
+        super().__init__(model_path=model_path, sim_model_path=sim_model_path, config=config)
         self.reset_command = np.array([0, 0, 0, -1.57079, 0, 1.57079, -0.7853, 0.0])
 
         # object indices
@@ -147,7 +152,6 @@ class FR3Pick(Task[FR3PickConfig]):
 
         Args:
             curr_state: The current state value. Shape=(nq + nv,).
-            config: The task configuration.
 
         Returns:
             in_goal: A bool indicating whether the object is in the goal region. Shape=(,).

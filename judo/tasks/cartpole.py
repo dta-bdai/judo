@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import mujoco
+from mujoco import MjModel, MjData
 import numpy as np
 
 from judo import MODEL_PATH
@@ -34,9 +35,14 @@ class Cartpole(Task[CartpoleConfig]):
     name: str = "cartpole"
     config_t: type[CartpoleConfig] = CartpoleConfig
 
-    def __init__(self, model_path: str = XML_PATH, sim_model_path: str | None = None) -> None:
+    def __init__(
+        self,
+        model_path: str = XML_PATH,
+        sim_model_path: str | None = None,
+        config: CartpoleConfig | None = None,
+    ) -> None:
         """Initializes the cartpole task."""
-        super().__init__(model_path=model_path, sim_model_path=sim_model_path)
+        super().__init__(model_path=model_path, sim_model_path=sim_model_path, config=config)
         self.reset()
 
     def reward(
@@ -63,9 +69,7 @@ class Cartpole(Task[CartpoleConfig]):
         """
         batch_size = states.shape[0]
 
-        vertical_rew = -self.config.w_vertical * smooth_l1_norm(np.cos(states[..., 1]) - 1, self.config.p_vertical).sum(
-            -1
-        )
+        vertical_rew = -self.config.w_vertical * smooth_l1_norm(np.cos(states[..., 1]) - 1, self.config.p_vertical).sum(-1)
         centered_rew = -self.config.w_centered * smooth_l1_norm(states[..., 0], self.config.p_centered).sum(-1)
         velocity_rew = -self.config.w_velocity * quadratic_norm(states[..., 2:]).sum(-1)
         control_rew = -self.config.w_control * quadratic_norm(controls).sum(-1)
@@ -82,3 +86,26 @@ class Cartpole(Task[CartpoleConfig]):
         self.data.qpos = np.array([1.0, np.pi]) + np.random.randn(2)
         self.data.qvel = 1e-1 * np.random.randn(2)
         mujoco.mj_forward(self.model, self.data)
+
+    def success(
+        self, model: MjModel, data: MjData, metadata: dict[str, Any] | None = None
+    ) -> bool:
+        """Returns success when the cartpole is balanced upright within a small tolerance.
+
+        Args:
+            model: The Mujoco model.
+            data: The Mujoco data.
+            config: The current task config (passed in from the top-level controller).
+            metadata: Any additional information that might be helpful for determining success.
+
+        Returns:
+            success: Whether the task was successful.
+        """
+        x = data.qpos[0]
+        theta = data.qpos[1]
+        if theta > np.pi:
+            theta -= 2 * np.pi
+        vx = data.qvel[0]
+        vtheta = data.qvel[1]
+        stable = (abs(x) < 1e-1) and (abs(theta) < 1e-1) and (abs(vx) < 1e-1) and (abs(vtheta) < 1e-1)
+        return stable
