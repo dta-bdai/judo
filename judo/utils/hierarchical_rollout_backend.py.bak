@@ -1,0 +1,242 @@
+# Copyright (c) 2026 Robotics and AI Institute LLC. All rights reserved.
+
+"""Hierarchical rollout backend for Spot tasks.
+
+This module provides GPU-batched hierarchical control, mirroring the structure of
+MjControlSimulator but optimized for parallel rollouts on GPU.
+
+Key differences:
+- MjControlSimulator: Single simulation, CPU-based physics (mujoco.mj_step)
+- HierarchicalRolloutBackend: Batched simulations, GPU-based physics (mujoco_warp)
+
+Key similarities (unified design):
+- Both use llc (locomotion policy) and pd_controller (torque computation)
+- Both use policy_decimation and global_step_counter for timing
+- Both follow the same control flow: command -> target_q -> torques -> physics step
+- Both reset internal state (previous_actions, step_counter) the same way
+
+Implementation details:
+- MjControlSimulator uses llc.compute(data, cmd) with MjData object
+- HierarchicalRolloutBackend uses llc.compute_batch(qpos, qvel, cmd) with numpy arrays
+- Both approaches delegate state management to the controller (no duplicate state tracking)
+"""
+
+from pathlib import Path
+
+import numpy as np
+import torch
+import warp as wp
+from mujoco import MjData, MjModel
+
+from judo.controller.mj_controllers import MjBatchedPdController
+from judo.controller.spot_constants import (
+    K_Q_P_RL,
+    K_QD_P_RL,
+    TORQUE_LIMITS_RL,
+)
+from judo.controller.spot_locomotion import BatchedSpotLocomotionController
+from judo.utils.mujoco_warp import DEVICE, RolloutBackend
+from judo.controller.mj_controllers import MjPassthroughController
+
+
+class HierarchicalRolloutBackend(RolloutBackend):
+    """GPU-batched rollout backend with hierarchical control for Spot tasks.
+
+    This backend extends RolloutBackend to add hierarchical control where high-level
+    commands are converted to low-level torques using a learned locomotion policy.
+
+    Similar to MjControlSimulator but optimized for batched GPU execution:
+    - MjControlSimulator: Single simulation, CPU-based (mujoco.mj_step)
+    - HierarchicalRolloutBackend: Batched simulations, GPU-based (mujoco_warp)
+
+    The control hierarchy:
+    - MPC produces high-level commands at ~10Hz
+    - Locomotion policy (llc) runs at ~56Hz producing target joint positions
+    - PD controller (pd_controller) converts positions to torques
+    - Physics steps at ~2000Hz with these torques
+    """
+
+    def __init__(
+        self,
+        model: MjModel,
+        num_threads: int,
+        num_problems: int = 1,
+        backend: str = "mujoco",
+        locomotion_policy_path: str | Path | None = None,
+        policy_frequency: float = 56.0,
+        device: str = DEVICE,
+    ):
+        """Initialize the hierarchical rollout backend.
+
+        Args:
+            model: MuJoCo model.
+            num_threads: Number of parallel rollouts per problem.
+            num_problems: Number of independent problems (for batched controllers).
+            backend: Backend type ("mujoco").
+            locomotion_policy_path: Path to locomotion policy .pt file. If None, falls back to standard rollout.
+            policy_frequency: Frequency at which locomotion policy runs (Hz).
+            device: Device for GPU operations.
+        """
+        super().__init__(model, num_threads, num_problems, backend)
+
+        self.use_hierarchical = locomotion_policy_path is not None
+
+        # Initialize low-level controller (locomotion policy) - matches MjControlSimulator naming
+        self.llc = BatchedSpotLocomotionController(
+            model_path=locomotion_policy_path,
+            device=device,
+        ) if self.use_hierarchical else MjPassthroughController()
+
+        # Initialize PD controller - matches MjControlSimulator naming
+        self.pd_controller = MjBatchedPdController(
+            kp=torch.tensor(K_Q_P_RL, dtype=torch.float32, device=device),
+            kd=torch.tensor(K_QD_P_RL, dtype=torch.float32, device=device),
+            limits=torch.tensor(
+                TORQUE_LIMITS_RL, dtype=torch.float32, device=device
+            ),
+        ) if self.use_hierarchical else MjPassthroughController()
+
+        # Calculate policy decimation - matches MjControlSimulator logic
+        physics_dt = model.opt.timestep
+        self.policy_decimation = max(1, int(1.0 / (policy_frequency * physics_dt)))
+
+        # Global step counter for policy decimation - matches MjControlSimulator
+        self.global_step_counter = 0
+
+        self.device = device
+
+    def rollout(
+        self,
+        model_data_pairs: tuple[MjModel, MjData],
+        x0: np.ndarray,
+        controls: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Conduct a rollout with optional hierarchical control.
+
+        For non-Spot tasks or when locomotion_policy_path is None, this behaves
+        identically to the parent RolloutBackend.
+
+        For Spot tasks with a locomotion policy, high-level commands are converted
+        to low-level torques using the locomotion policy before stepping physics.
+
+        Mirrors the structure of MjControlSimulator.step() but for batched GPU execution.
+
+        Args:
+            model_data_pairs: Tuple of (MjModel, MjData).
+            x0: Initial state(s). Shape (x0_dim,) for single problem, (num_problems, x0_dim) for multi-problem.
+            controls: Control inputs. For Spot, these are high-level commands (base_vel, arm, legs, torso).
+                Shape (num_threads, horizon, nu) for single problem,
+                (num_problems*num_threads, horizon, nu) for multi-problem.
+
+        Returns:
+            Tuple of (states, sensors):
+            - states: shape (num_worlds, horizon, nq + nv)
+            - sensors: shape (num_worlds, horizon, nsensordata)
+        """
+        if not self.use_hierarchical:
+            # Fall back to standard rollout
+            return super().rollout(model_data_pairs, x0, controls)
+
+        # Validate command format
+        self.llc.validate_command(controls[0, 0])  # Validate one command
+
+        # Hierarchical rollout for Spot
+        model, data = model_data_pairs
+        nq = model.nq
+        nv = model.nv
+        nsensordata = model.nsensordata
+        horizon = controls.shape[1]
+
+        # Handle both single-problem and multi-problem cases
+        if x0.ndim == 1:
+            x0_batched = np.tile(x0, (self.num_threads, 1))
+        else:
+            x0_batched = np.repeat(x0, self.num_threads, axis=0)
+
+        num_worlds = x0_batched.shape[0]
+
+        # Pre-allocate output buffers
+        out_states = np.zeros((num_worlds, horizon, nq + nv), dtype=np.float32)
+        out_sensors = np.zeros((num_worlds, horizon, nsensordata), dtype=np.float32)
+
+        # Convert initial state and controls to GPU
+        qpos_wp = wp.zeros((num_worlds, nq), dtype=wp.float32)
+        qvel_wp = wp.zeros((num_worlds, nv), dtype=wp.float32)
+        controls_wp = wp.array(controls, dtype=wp.float32)
+        out_states_wp = wp.zeros((num_worlds, horizon, nq + nv), dtype=wp.float32)
+        out_sensors_wp = wp.zeros((num_worlds, horizon, nsensordata), dtype=wp.float32)
+
+        # Set initial state
+        wp.copy(qpos_wp, wp.array(x0_batched[:, :nq], dtype=wp.float32))
+        wp.copy(qvel_wp, wp.array(x0_batched[:, nq:], dtype=wp.float32))
+
+        # Copy to MuJoCo GPU data
+        wp.copy(self.mjw_data.qpos, qpos_wp)
+        wp.copy(self.mjw_data.qvel, qvel_wp)
+        wp.synchronize()
+
+        # Initialize target_q to avoid unbound variable issues - matches MjControlSimulator
+        target_q_torch = None
+
+        # Rollout loop
+        for t in range(horizon):
+            # Synchronize before reading state
+            wp.synchronize()
+
+            # Convert warp arrays to torch tensors (zero-copy on same device)
+            qpos_torch = wp.to_torch(qpos_wp)
+            qvel_torch = wp.to_torch(qvel_wp)
+            cmd_torch = wp.to_torch(controls_wp[:, t, :])
+
+            # Update policy every policy_decimation steps using global counter - matches MjControlSimulator
+            if (
+                target_q_torch is None
+                or self.global_step_counter % self.policy_decimation == 0
+            ):
+                # Get target joint positions from locomotion policy using compute_batch
+                # Passes torch tensors directly, avoiding unnecessary conversions
+                target_q_torch = self.llc.compute_batch(cmd_torch, qpos_torch, qvel_torch)
+
+            # Compute PD torques using compute_batch
+            # Extract current joint state (skip base pose/velocity)
+            q_torch = qpos_torch[:, 7:]  # Skip base pose (batch_size, 19)
+            dq_torch = qvel_torch[:, 6:]  # Skip base velocity (batch_size, 19)
+            tau = self.pd_controller.compute_batch(target_q_torch, q_torch, dq_torch)
+
+            # Convert torques to warp array (zero-copy on same device)
+            torques_wp = wp.from_torch(tau)
+
+            # Set control
+            wp.copy(self.mjw_data.ctrl, torques_wp)
+
+            # Step simulation - uses mujoco_warp (GPU) instead of mujoco.mj_step (CPU)
+            wp.capture_launch(self.mjw_step_graph)
+
+            # Increment global step counter - matches MjControlSimulator
+            self.global_step_counter += 1
+
+            # Copy results - store state and sensors at this timestep
+            wp.copy(qpos_wp, self.mjw_data.qpos)
+            wp.copy(qvel_wp, self.mjw_data.qvel)
+            wp.copy(out_states_wp[:, t, :nq], qpos_wp)
+            wp.copy(out_states_wp[:, t, nq:], qvel_wp)
+            wp.copy(out_sensors_wp[:, t, :], self.mjw_data.sensordata)
+
+        # Final sync and copy back to CPU
+        wp.synchronize()
+
+        # Copy results from GPU to CPU
+        out_states[:, :, :] = out_states_wp.numpy()
+        out_sensors[:, :, :] = out_sensors_wp.numpy()
+
+        return out_states, out_sensors
+
+    def reset(self):
+        """Reset internal state (previous actions and step counter).
+
+        Matches MjControlSimulator.reset() structure.
+        """
+        if self.use_hierarchical:
+            self.llc.reset()
+            self.pd_controller.reset()
+            self.global_step_counter = 0

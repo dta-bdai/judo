@@ -5,6 +5,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Literal
 
+from mujoco import MjData
 import numpy as np
 from omegaconf import DictConfig
 from scipy.interpolate import interp1d
@@ -71,7 +72,7 @@ class Controller:
 
         if isinstance(rollout_backend, str):
             self.rollout_backend = RolloutBackend(
-                model=self.model, num_threads=self.optimizer_cfg.num_rollouts, backend=rollout_backend
+                model=self.model, num_threads=self.optimizer_cfg.num_rollouts
             )
         else:
             self.rollout_backend = rollout_backend
@@ -211,7 +212,6 @@ class Controller:
             self._pre_rollout()
             # Pass 1D x0 - rollout() handles tiling internally for single-problem mode
             self.states, self.sensors = self.rollout_backend.rollout(
-                self.model_data_pairs,
                 self.current_state,
                 self.rollout_controls,
             )
@@ -314,6 +314,9 @@ class Controller:
     def action(self, time: float) -> np.ndarray:
         """Current best action of policy."""
         return self.spline(time)
+
+    def compute(self, data: MjData) -> np.ndarray:
+        return self.action(data.time)
 
     def update_spline(self, times: np.ndarray, controls: np.ndarray) -> None:
         """Update the spline with new timesteps / controls."""
@@ -525,11 +528,12 @@ class BatchedControllers:
         # Collect controls from all controllers: shape (num_problems * num_threads, horizon, nu)
         controls_batched = np.concatenate([ctrl.rollout_controls for ctrl in self.controllers], axis=0)
 
+        # Note: previous_actions must be set via sync_previous_actions_from_sims() before calling this
+
         # Execute the batched rollout
         # x0_stacked: (num_problems, x0_dim) -> internally becomes (num_problems * num_threads, x0_dim)
         # controls_batched: (num_problems * num_threads, horizon, nu)
         all_states, all_sensors = self.rollout_backend.rollout(
-            self.controllers[0].model_data_pairs,
             x0_stacked,
             controls_batched,
         )
@@ -579,6 +583,18 @@ class BatchedControllers:
             raise ValueError(f"Expected {len(self.controllers)} state messages, got {len(state_msgs)}")
         for ctrl, state_msg in zip(self.controllers, state_msgs, strict=False):
             ctrl.update_states(state_msg)
+
+    def set_init_previous_actions(self, previous_actions_list: list[np.ndarray]) -> None:
+        """Sync previous_actions from sims directly to RolloutBackend.
+
+        This bypasses the Controller intermediate storage since controllers don't
+        actually use previous_actions - they just pass it to RolloutBackend.
+
+        Args:
+            previous_actions_list: List of previous actions arrays, one per controller/problem.
+        """
+        # Set directly to RolloutBackend
+        self.rollout_backend.set_init_previous_actions(previous_actions_list)
 
 
 def make_spline(times: np.ndarray, controls: np.ndarray, spline_order: str) -> interp1d:

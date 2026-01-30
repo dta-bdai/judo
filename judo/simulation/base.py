@@ -1,13 +1,13 @@
 # Copyright (c) 2025 Robotics and AI Institute LLC. All rights reserved.
 
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Any, Callable
 
 from omegaconf import DictConfig
 
 from judo.app.utils import register_tasks_from_cfg
 from judo.tasks import get_registered_tasks
-from judo.tasks.base import Task
+from judo.tasks.base import Task, TaskConfig
 
 
 class Simulation(ABC):
@@ -21,26 +21,44 @@ class Simulation(ABC):
 
     def __init__(
         self,
-        init_task: str = "cylinder_push",
+        task_name: str = "cylinder_push",
+        task_config: TaskConfig | None = None,
         task_registration_cfg: DictConfig | None = None,
     ) -> None:
-        """Initialize the simulation node."""
+        """Initialize the simulation node.
+
+        Args:
+            task_name: Task name to initialize (ignored if task_config is provided).
+            task_registration_cfg: Optional task registration config.
+            task_config: Optional task configuration. If provided, task name is extracted from it.
+        """
         # handling custom task registration
         if task_registration_cfg is not None:
             register_tasks_from_cfg(task_registration_cfg)
 
         self.control: Callable | None = None
         self.paused = False
-        self.set_task(init_task)
 
-    def set_task(self, task_name: str) -> None:
-        """Helper to initialize task from task name."""
+        self.set_task(task_name, task_config)
+
+    def set_task(self, task_name: str, task_config: TaskConfig | None = None) -> None:
+        """Helper to initialize task from task name.
+
+        Args:
+            task_name: Name of the task to initialize.
+            task_config: Optional task configuration to apply after creation.
+        """
         task_entry = get_registered_tasks().get(task_name)
         if task_entry is None:
             raise ValueError(f"Init task {task_name} not found in task registry")
 
         task_cls, _ = task_entry
         self.task: Task = task_cls()
+
+        # Apply config if provided
+        if task_config is not None:
+            self.task.config = task_config
+
         self.task.reset()
 
     @abstractmethod

@@ -108,7 +108,7 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
         return len(self.default_command)
 
     @property
-    def ctrlrange(self) -> np.ndarray:
+    def actuator_ctrlrange(self) -> np.ndarray:
         """Control bounds for the task."""
         BASE_LOWER = -BASE_SOFT_LIMITS
         BASE_UPPER = BASE_SOFT_LIMITS
@@ -164,6 +164,7 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
         self.leg_selection_index = None
         self.gripper_selection_index = None
 
+        command_values: list[float]
         if not self.use_arm and not self.use_legs:  # Base
             # Base velocity
             command_values = [0, 0, 0]
@@ -189,6 +190,8 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
                 self.gripper_selection_index = len(command_values) - 1
             command_values.extend([*LEGS_STANDING_POS[0:6], 0])
             self.leg_selection_index = len(command_values) - 1
+        else:
+            raise ValueError("Invalid combination of use_arm and use_legs")
 
         # Add torso if enabled
         if self.use_torso:

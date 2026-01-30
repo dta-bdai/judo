@@ -85,13 +85,13 @@ class SpotRuggedBoxPush(SpotBase[SpotRuggedBoxPushConfig]):
         self.end_effector_to_object_idx = get_sensor_indices(self.model, "sensor_arm_link_fngr")
 
     @property
-    def ctrlrange(self) -> np.ndarray:
+    def actuator_ctrlrange(self) -> np.ndarray:
         """Control bounds for the task with custom torso height upper bound.
 
         Override to set a lower upper bound for torso height control.
         """
         # Get the base control range from parent class
-        base_ctrlrange = super().ctrlrange
+        base_ctrlrange = super().actuator_ctrlrange
 
         # Modify the torso height upper bound (last element in the upper bound)
         # The torso height is the last element if use_torso is True
