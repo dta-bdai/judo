@@ -211,7 +211,13 @@ class ViserMjModel:
                 rgb=DEFAULT_BEST_SPLINE_COLOR,
             )
         )
-        self._traces[0].colors = np.tile(self._traces[0].colors[0, :, :], (all_traces_rollout_size, 1, 1))
+        if all_traces_rollout_size > 0:
+            colors = np.asarray(self._traces[0].colors)
+            if colors.ndim == 1:
+                # colors is (3,) RGB, tile to (N, 2, 3)
+                self._traces[0].colors = np.tile(colors.reshape(1, 1, 3), (all_traces_rollout_size, 2, 1))
+            else:
+                self._traces[0].colors = np.tile(colors[0, :, :], (all_traces_rollout_size, 1, 1))
         if (rest_trace_size := num_traces - all_traces_rollout_size) > 0:
             self._traces.append(
                 add_segments(
@@ -221,7 +227,12 @@ class ViserMjModel:
                     rgb=DEFAULT_SPLINE_COLOR,
                 )
             )
-            self._traces[1].colors = np.tile(self._traces[1].colors[0, :, :], (rest_trace_size, 1, 1))
+            colors = np.asarray(self._traces[1].colors)
+            if colors.ndim == 1:
+                # colors is (3,) RGB, tile to (N, 2, 3)
+                self._traces[1].colors = np.tile(colors.reshape(1, 1, 3), (rest_trace_size, 2, 1))
+            else:
+                self._traces[1].colors = np.tile(colors[0, :, :], (rest_trace_size, 1, 1))
 
     def remove_traces(self) -> None:
         """Remove traces."""
