@@ -30,6 +30,7 @@ classifiers = [
 
 dependencies = [
     "dora-utils",  # dora + qol utils for writing nodes
+    "h5py",
     "mujoco==3.4.0",
     "mujoco_warp==0.0.2",
     "numpy",
@@ -39,6 +40,7 @@ dependencies = [
     "rich",  # for displaying tables in benchmarking
     "robot_descriptions",  # for loading mujoco_menagerie Spot meshes
     "torch>=2.7.0",
+    "tyro",
     "scipy",
     "viser>=1.0.0",
 ]

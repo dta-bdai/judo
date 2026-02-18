@@ -19,7 +19,7 @@ from judo.utils.rollout_backend import RolloutBackend
 from judo.utils.timer import Timer
 
 NCONMAX = 256
-NJMAX = 500
+NJMAX = 900
 DEVICE = "cuda:0"
 
 
