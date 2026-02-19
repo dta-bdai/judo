@@ -4,7 +4,6 @@
 
 import mujoco_warp as mjw
 import numpy as np
-import torch
 import warp as wp
 from mujoco import MjData, MjModel
 
@@ -15,6 +14,18 @@ from judo.utils.timer import Timer
 NCONMAX = 256
 NJMAX = 900
 DEVICE = "cuda:0"
+
+
+@wp.kernel
+def _copy_target_to_ctrl(
+    target_q: wp.array2d(dtype=wp.float32),
+    ctrl: wp.array2d(dtype=wp.float32),
+    n_controlled: int,
+):
+    """Copy target_q into the first n_controlled columns of ctrl."""
+    i = wp.tid()
+    for j in range(n_controlled):
+        ctrl[i, j] = target_q[i, j]
 
 
 class PassThroughController:
@@ -104,8 +115,8 @@ class MJWarpRolloutBackend(RolloutBackend):
         self,
         x0: np.ndarray,
         controls: np.ndarray,
-        last_policy_output: torch.Tensor | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, torch.Tensor | None]:
+        last_policy_output: wp.array | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, wp.array | None]:
         """Conduct a GPU-accelerated rollout using mujoco_warp.
 
         Supports both single-problem and multi-problem modes:
@@ -115,14 +126,14 @@ class MJWarpRolloutBackend(RolloutBackend):
         Args:
             x0: Initial state(s) as [qpos, qvel] (no time).
             controls: Control inputs.
-            last_policy_output: Previous policy outputs as torch.Tensor on GPU,
+            last_policy_output: Previous policy outputs as warp array on GPU,
                 shape (num_worlds, policy_dim), or None.
 
         Returns:
             Tuple of (states, sensors, policy_output):
             - states: shape (num_worlds, horizon, nq + nv)
             - sensors: shape (num_worlds, horizon, nsensordata)
-            - policy_output: Final policy outputs as torch.Tensor on GPU, or None.
+            - policy_output: Final policy outputs as warp array on GPU, or None.
         """
         nq = self.model.nq
         nv = self.model.nv
@@ -164,33 +175,34 @@ class MJWarpRolloutBackend(RolloutBackend):
 
         qpos_wp = wp.zeros((num_worlds, nq), dtype=wp.float32)
         qvel_wp = wp.zeros((num_worlds, nv), dtype=wp.float32)
-        target_q_torch = None
+        ctrl_wp = wp.zeros((num_worlds, nu), dtype=wp.float32)
+        target_q_wp = None
 
-        previous_actions_torch = last_policy_output
+        previous_actions_wp = last_policy_output
 
         for t in range(horizon):
             wp.synchronize()
 
-            qpos_torch = wp.to_torch(qpos_wp)
-            qvel_torch = wp.to_torch(qvel_wp)
-            cmd_torch = wp.to_torch(controls_wp[:, t, :])
+            cmd_wp = controls_wp[:, t, :]
 
             # Update locomotion policy
             if (
-                target_q_torch is None
+                target_q_wp is None
                 or self.global_step_counter % self.policy_decimation == 0
             ):
-                target_q_torch, previous_actions_torch = self.locomotion_controller.compute_batch(
-                    cmd_torch, qpos_torch, qvel_torch, previous_actions_torch
+                target_q_wp, previous_actions_wp = self.locomotion_controller.compute_batch(
+                    cmd_wp, qpos_wp, qvel_wp, previous_actions_wp
                 )
 
-            # Pad to full actuator dimension (uncontrolled actuators get zero torque)
-            n_controlled = target_q_torch.shape[-1]
-            full_tau = torch.zeros(num_worlds, nu, device=target_q_torch.device, dtype=target_q_torch.dtype)
-            full_tau[:, :n_controlled] = target_q_torch
-            torques_wp = wp.from_torch(full_tau)
-
-            wp.copy(self.mjw_data.ctrl, torques_wp)
+            # Copy target_q into ctrl (pad remaining actuators with zeros)
+            n_controlled = target_q_wp.shape[1]
+            wp.launch(
+                _copy_target_to_ctrl,
+                dim=num_worlds,
+                inputs=[target_q_wp, ctrl_wp, n_controlled],
+                device=self.device,
+            )
+            wp.copy(self.mjw_data.ctrl, ctrl_wp)
 
             wp.capture_launch(self.mjw_step_graph)
 
@@ -213,7 +225,7 @@ class MJWarpRolloutBackend(RolloutBackend):
         out_sensors = out_sensors_wp.numpy()
         self.timer_gpu_to_cpu.toc()
 
-        return out_states, out_sensors, previous_actions_torch
+        return out_states, out_sensors, previous_actions_wp
 
     def update(self, num_threads: int, num_problems: int = 1) -> None:
         """Update the backend with a new number of threads."""

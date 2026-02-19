@@ -7,8 +7,7 @@ from pathlib import Path
 import numpy as np
 import onnx
 import onnxruntime as ort
-import torch
-from torch import nn
+import warp as wp
 
 from judo.tasks.spot.spot_constants import (
     ISAAC_TO_MUJOCO_INDICES_12,
@@ -19,7 +18,124 @@ from judo.tasks.spot.spot_constants import (
 )
 
 
-class BatchedSpotLocomotion(nn.Module):
+@wp.kernel
+def build_observation_kernel(
+    qpos: wp.array2d(dtype=wp.float32),
+    qvel: wp.array2d(dtype=wp.float32),
+    cmd: wp.array2d(dtype=wp.float32),
+    prev_actions: wp.array2d(dtype=wp.float32),
+    joints_offset: wp.array(dtype=wp.float32),
+    mj_to_isaac: wp.array(dtype=wp.int32),
+    obs: wp.array2d(dtype=wp.float32),
+):
+    """Build 84-dim observation from state, command, and previous actions.
+
+    Per-thread (one thread per batch element):
+      obs[ 0: 3] = quat_rotate_inverse(quat, lin_vel)
+      obs[ 3: 6] = angular velocity
+      obs[ 6: 9] = quat_rotate_inverse(quat, [0, 0, -1])
+      obs[ 9:34] = cmd (25 dims)
+      obs[34:53] = mujoco->isaac reordered joints - offset (19 dims)
+      obs[53:72] = mujoco->isaac reordered joint velocities (19 dims)
+      obs[72:84] = previous actions (12 dims)
+    """
+    i = wp.tid()
+
+    # Quaternion (scalar-first: w, x, y, z)
+    qw = qpos[i, 3]
+    qx = qpos[i, 4]
+    qy = qpos[i, 5]
+    qz = qpos[i, 6]
+
+    ww = qw * qw
+    xx = qx * qx
+    yy = qy * qy
+    zz = qz * qz
+    wx = qw * qx
+    wy = qw * qy
+    wz = qw * qz
+    xy = qx * qy
+    xz = qx * qz
+    yz = qy * qz
+
+    # quat_rotate_inverse(quat, lin_vel) -> obs[0:3]
+    vx = qvel[i, 0]
+    vy = qvel[i, 1]
+    vz = qvel[i, 2]
+    obs[i, 0] = (ww + xx - yy - zz) * vx + 2.0 * (xy + wz) * vy + 2.0 * (xz - wy) * vz
+    obs[i, 1] = 2.0 * (xy - wz) * vx + (ww - xx + yy - zz) * vy + 2.0 * (yz + wx) * vz
+    obs[i, 2] = 2.0 * (xz + wy) * vx + 2.0 * (yz - wx) * vy + (ww - xx - yy + zz) * vz
+
+    # Angular velocity -> obs[3:6]
+    obs[i, 3] = qvel[i, 3]
+    obs[i, 4] = qvel[i, 4]
+    obs[i, 5] = qvel[i, 5]
+
+    # quat_rotate_inverse(quat, [0, 0, -1]) -> obs[6:9]
+    obs[i, 6] = -2.0 * (xz - wy)
+    obs[i, 7] = -2.0 * (yz + wx)
+    obs[i, 8] = -(ww - xx - yy + zz)
+
+    # Command (25 dims) -> obs[9:34]
+    for j in range(25):
+        obs[i, 9 + j] = cmd[i, j]
+
+    # Mujoco->Isaac reorder + offset subtraction for joints -> obs[34:53]
+    for j in range(19):
+        idx = mj_to_isaac[j]
+        obs[i, 34 + j] = qpos[i, 7 + idx] - joints_offset[j]
+
+    # Mujoco->Isaac reorder for joint velocities -> obs[53:72]
+    for j in range(19):
+        idx = mj_to_isaac[j]
+        obs[i, 53 + j] = qvel[i, 6 + idx]
+
+    # Previous actions -> obs[72:84]
+    for j in range(12):
+        obs[i, 72 + j] = prev_actions[i, j]
+
+
+@wp.kernel
+def compute_targets_kernel(
+    actions: wp.array2d(dtype=wp.float32),
+    cmd: wp.array2d(dtype=wp.float32),
+    legs_offset: wp.array(dtype=wp.float32),
+    isaac_to_mj: wp.array(dtype=wp.int32),
+    action_scale: float,
+    target_q: wp.array2d(dtype=wp.float32),
+):
+    """Post-process policy actions into 19-dim target_q.
+
+    Per-thread:
+      1. Scale actions and apply offset, then isaac->mujoco reorder for legs
+      2. Per-leg override: if any of 3 cmd joints != 0, use cmd instead
+      3. Arm passthrough: target_q[12:19] = cmd[3:10]
+    """
+    i = wp.tid()
+
+    # Scale + offset + isaac->mujoco reorder for legs
+    # _isaac_to_mujoco_batch: output[k] = input[ISAAC_TO_MUJOCO_INDICES_12[k]]
+    for k in range(12):
+        j = isaac_to_mj[k]
+        target_q[i, k] = actions[i, j] * action_scale + legs_offset[j]
+
+    # Per-leg override: if any of 3 cmd joints are nonzero, use cmd
+    # leg_joint_command = cmd[:, 10:22]
+    for leg in range(4):
+        any_nonzero = int(0)
+        for dof in range(3):
+            if cmd[i, 10 + leg * 3 + dof] != 0.0:
+                any_nonzero = 1
+        if any_nonzero == 1:
+            for dof in range(3):
+                target_q[i, leg * 3 + dof] = cmd[i, 10 + leg * 3 + dof]
+
+    # Arm passthrough: target_q[12:19] = cmd[3:10]
+    for j in range(7):
+        target_q[i, 12 + j] = cmd[i, 3 + j]
+
+
+class BatchedSpotLocomotion:
     """Batched GPU-accelerated locomotion controller for Spot.
 
     This controller implements the learned locomotion policy that converts
@@ -34,23 +150,24 @@ class BatchedSpotLocomotion(nn.Module):
     def __init__(
         self,
         model_path: str | Path,
-        device: str | torch.device = "cuda:0",
+        device: str = "cuda:0",
         action_scale: float = 0.2,
     ) -> None:
         """Initialize the batched locomotion controller.
 
         Args:
             model_path: Path to the pre-trained locomotion policy (.onnx file).
-            device: The torch device to load the model and run inference on.
+            device: The warp device string (e.g. "cuda:0").
             action_scale: Scaling factor for the action. Defaults to 0.2.
         """
-        super().__init__()
-        self.device = device
+        self._device = device
         self.action_scale = action_scale
 
         # Parse device string to get CUDA device id
-        torch_device = torch.device(device)
-        self._device_id = torch_device.index or 0
+        if ":" in device:
+            self._device_id = int(device.split(":")[1])
+        else:
+            self._device_id = 0
 
         # Load ONNX model and make batch dimension dynamic (on-disk file
         # keeps batch=1 for the C++ rollout code; Python needs dynamic batch).
@@ -66,53 +183,37 @@ class BatchedSpotLocomotion(nn.Module):
         self._ort_input_name = self._ort_session.get_inputs()[0].name
         self._ort_output_name = self._ort_session.get_outputs()[0].name
 
-        # Locomotion policy default joint offsets (for input normalization & target offset)
-        default_joints_offset = np.array(
-            LOCOMOTION_DEFAULT_JOINTS_OFFSET, dtype=np.float32
+        # Constant arrays on GPU
+        self._joints_offset = wp.array(
+            np.array(LOCOMOTION_DEFAULT_JOINTS_OFFSET, dtype=np.float32),
+            dtype=wp.float32,
+            device=device,
         )
-        default_legs_offset = np.array(LOCOMOTION_DEFAULT_LEGS_OFFSET, dtype=np.float32)
-
-        # Register buffers
-        self.register_buffer(
-            "joints_offset",
-            torch.tensor(
-                default_joints_offset, dtype=torch.float32, device=self.device
-            ),
+        self._legs_offset = wp.array(
+            np.array(LOCOMOTION_DEFAULT_LEGS_OFFSET, dtype=np.float32),
+            dtype=wp.float32,
+            device=device,
         )
-        self.register_buffer(
-            "legs_offset",
-            torch.tensor(default_legs_offset, dtype=torch.float32, device=self.device),
+        self._mj_to_isaac = wp.array(
+            np.array(MUJOCO_TO_ISAAC_INDICES_19, dtype=np.int32),
+            dtype=wp.int32,
+            device=device,
         )
-        self.register_buffer(
-            "unit_gravity",
-            torch.tensor([0.0, 0.0, -1.0], dtype=torch.float32, device=self.device),
-        )
-
-        # Index conversion between MuJoCo and Isaac formats
-        self.register_buffer(
-            "mujoco_to_isaac_indices",
-            torch.tensor(
-                MUJOCO_TO_ISAAC_INDICES_19, dtype=torch.long, device=self.device
-            ),
-        )
-        self.register_buffer(
-            "isaac_to_mujoco_indices",
-            torch.tensor(
-                ISAAC_TO_MUJOCO_INDICES_12, dtype=torch.long, device=self.device
-            ),
+        self._isaac_to_mj = wp.array(
+            np.array(ISAAC_TO_MUJOCO_INDICES_12, dtype=np.int32),
+            dtype=wp.int32,
+            device=device,
         )
 
-    def _run_policy(self, obs: torch.Tensor) -> torch.Tensor:
+    def _run_policy(self, obs: wp.array, actions: wp.array) -> None:
         """Run the locomotion policy via ONNX Runtime with GPU I/O binding.
 
-        Args:
-            obs: Observation tensor on GPU (batch_size, 84).
+        Writes ORT output directly into the pre-allocated ``actions`` warp array.
 
-        Returns:
-            Actions tensor on GPU (batch_size, POLICY_OUTPUT_DIM).
+        Args:
+            obs: Observation array on GPU (batch_size, 84).
+            actions: Pre-allocated output array on GPU (batch_size, POLICY_OUTPUT_DIM).
         """
-        obs = obs.contiguous()
-        actions = torch.empty(obs.shape[0], POLICY_OUTPUT_DIM, dtype=torch.float32, device=self.device)
         io_binding = self._ort_session.io_binding()
         io_binding.bind_input(
             name=self._ort_input_name,
@@ -120,7 +221,7 @@ class BatchedSpotLocomotion(nn.Module):
             device_id=self._device_id,
             element_type=np.float32,
             shape=tuple(obs.shape),
-            buffer_ptr=obs.data_ptr(),
+            buffer_ptr=obs.ptr,
         )
         io_binding.bind_output(
             name=self._ort_output_name,
@@ -128,208 +229,61 @@ class BatchedSpotLocomotion(nn.Module):
             device_id=self._device_id,
             element_type=np.float32,
             shape=tuple(actions.shape),
-            buffer_ptr=actions.data_ptr(),
+            buffer_ptr=actions.ptr,
         )
         self._ort_session.run_with_iobinding(io_binding)
-        return actions
 
-    @staticmethod
-    def quat_rotate_inverse(quat: torch.Tensor, vec: torch.Tensor) -> torch.Tensor:
-        """Rotate vector by inverse of quaternion (all on GPU).
-
-        Args:
-            quat: Quaternion in scalar-first format (batch_size, 4) [w, x, y, z]
-            vec: Vector to rotate (batch_size, 3)
-
-        Returns:
-            Rotated vector (batch_size, 3)
-        """
-        w, x, y, z = quat[:, 0], quat[:, 1], quat[:, 2], quat[:, 3]
-        vx, vy, vz = vec[:, 0], vec[:, 1], vec[:, 2]
-
-        ww = w * w
-        xx = x * x
-        yy = y * y
-        zz = z * z
-        wx = w * x
-        wy = w * y
-        wz = w * z
-        xy = x * y
-        xz = x * z
-        yz = y * z
-
-        result = torch.stack(
-            [
-                (ww + xx - yy - zz) * vx + 2 * (xy + wz) * vy + 2 * (xz - wy) * vz,
-                2 * (xy - wz) * vx + (ww - xx + yy - zz) * vy + 2 * (yz + wx) * vz,
-                2 * (xz + wy) * vx + 2 * (yz - wx) * vy + (ww - xx - yy + zz) * vz,
-            ],
-            dim=1,
-        )
-
-        return result
-
-    @torch.no_grad()
-    def _get_observation(
-        self,
-        qpos: torch.Tensor,
-        qvel: torch.Tensor,
-        previous_actions: torch.Tensor,
-        cmd: torch.Tensor,
-    ) -> torch.Tensor:
-        """Extract batched observation from state (internal method).
-
-        Args:
-            qpos: Joint positions (batch_size, nq). First 7 are base pose (pos + quat).
-            qvel: Joint velocities (batch_size, nv). First 6 are base velocity (linear + angular).
-            previous_actions: Previous actions vector (batch_size, POLICY_OUTPUT_DIM).
-            cmd: Command vector for the base and arm (batch_size, 25).
-
-        Returns:
-            Observation tensor (batch_size, 84).
-        """
-        batch_size = qpos.shape[0]
-
-        q = qpos[:, 7:]  # (batch_size, 19)
-        dq = qvel[:, 6:]  # (batch_size, 19)
-        quat = qpos[:, 3:7]  # (batch_size, 4)
-
-        lin_vel = qvel[:, :3]  # (batch_size, 3)
-        v_base = self.quat_rotate_inverse(quat, lin_vel)
-
-        unit_gravity_expanded = self.unit_gravity.unsqueeze(0).expand(batch_size, -1)
-        gvec = self.quat_rotate_inverse(quat, unit_gravity_expanded)
-
-        omega = qvel[:, 3:6]  # (batch_size, 3)
-
-        # Build observation (84 dims)
-        obs = torch.zeros(batch_size, 84, dtype=torch.float32, device=self.device)
-
-        obs[:, 0:3] = v_base
-        obs[:, 3:6] = omega
-        obs[:, 6:9] = gvec
-        obs[:, 9:12] = cmd[:, 0:3]
-        obs[:, 12:19] = cmd[:, 3:10]
-        obs[:, 19:31] = cmd[:, 10:22]
-        obs[:, 31:34] = cmd[:, 22:25]
-
-        q_offset_isaac = self._mujoco_to_isaac_batch(q) - self.joints_offset.unsqueeze(0)
-        obs[:, 34:53] = q_offset_isaac
-
-        dq_isaac = self._mujoco_to_isaac_batch(dq)
-        obs[:, 53:72] = dq_isaac
-
-        obs[:, 72:84] = previous_actions
-
-        return obs
-
-    @torch.no_grad()
-    def _get_joint_target_from_obs(
-        self,
-        obs: torch.Tensor,
-        cmd: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Infer actions and return target joint positions (internal method).
-
-        Args:
-            obs: Observation input for the policy (batch_size, 84).
-            cmd: Command vector for the base and arm (batch_size, 25).
-
-        Returns:
-            Tuple of (actions, target_q):
-                - actions: Raw Isaac policy output (batch_size, POLICY_OUTPUT_DIM) - Isaac order
-                - target_q: Target joint positions (batch_size, 19) - Mujoco order
-        """
-        batch_size = obs.shape[0]
-
-        actions = self._run_policy(obs)  # (batch_size, POLICY_OUTPUT_DIM)
-
-        arm_joint_command = cmd[:, 3:10]  # (batch_size, 7)
-        leg_joint_command = cmd[:, 10:22]  # (batch_size, POLICY_OUTPUT_DIM - 7)
-
-        target_leg = self._isaac_to_mujoco_batch(
-            actions * self.action_scale + self.legs_offset
-        )
-
-        # Override leg commands where specified
-        fl_mask = torch.any(leg_joint_command[:, 0:3] != 0, dim=1)
-        target_leg[fl_mask, 0:3] = leg_joint_command[fl_mask, 0:3]
-
-        fr_mask = torch.any(leg_joint_command[:, 3:6] != 0, dim=1)
-        target_leg[fr_mask, 3:6] = leg_joint_command[fr_mask, 3:6]
-
-        hl_mask = torch.any(leg_joint_command[:, 6:9] != 0, dim=1)
-        target_leg[hl_mask, 6:9] = leg_joint_command[hl_mask, 6:9]
-
-        hr_mask = torch.any(leg_joint_command[:, 9:12] != 0, dim=1)
-        target_leg[hr_mask, 9:12] = leg_joint_command[hr_mask, 9:12]
-
-        target_q = torch.zeros(batch_size, 19, dtype=torch.float32, device=self.device)
-        target_q[:, 0:12] = target_leg
-        target_q[:, 12:19] = arm_joint_command
-
-        return actions, target_q
-
-    @torch.no_grad()
     def compute_batch(
         self,
-        cmd: torch.Tensor,
-        qpos: torch.Tensor,
-        qvel: torch.Tensor,
-        previous_actions: torch.Tensor | None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        cmd: wp.array,
+        qpos: wp.array,
+        qvel: wp.array,
+        previous_actions: wp.array | None,
+    ) -> tuple[wp.array, wp.array]:
         """Get target joint positions from high-level command (batched interface).
 
         Args:
-            cmd: High-level command (batch_size, 25) or (25,).
-            qpos: Joint positions (batch_size, nq) or (nq,).
-            qvel: Joint velocities (batch_size, nv) or (nv,).
+            cmd: High-level command (batch_size, 25).
+            qpos: Joint positions (batch_size, nq).
+            qvel: Joint velocities (batch_size, nv).
             previous_actions: Previous actions (batch_size, POLICY_OUTPUT_DIM) or None.
 
         Returns:
-            Tuple of (target_q, new_previous_actions).
+            Tuple of (target_q, new_previous_actions) as warp arrays.
         """
-
-        single_input = cmd.ndim == 1
-        if single_input:
-            assert qpos.ndim == 1 and qvel.ndim == 1
-            cmd = cmd.unsqueeze(0)
-            qpos = qpos.unsqueeze(0)
-            qvel = qvel.unsqueeze(0)
-            if previous_actions is not None:
-                previous_actions = previous_actions.unsqueeze(0)
-
         batch_size = cmd.shape[0]
 
         if previous_actions is None:
-            previous_actions = torch.zeros(batch_size, 12, device=self.device)
+            previous_actions = wp.zeros((batch_size, POLICY_OUTPUT_DIM), dtype=wp.float32, device=self._device)
 
-        if qpos.ndim == 1:
-            qpos = qpos.unsqueeze(0).expand(batch_size, -1)
-        if qvel.ndim == 1:
-            qvel = qvel.unsqueeze(0).expand(batch_size, -1)
-        if previous_actions.shape[0] == 1 and batch_size > 1:
-            previous_actions = previous_actions.expand(batch_size, -1)
+        obs = wp.zeros((batch_size, 84), dtype=wp.float32, device=self._device)
+        wp.launch(
+            build_observation_kernel,
+            dim=batch_size,
+            inputs=[qpos, qvel, cmd, previous_actions, self._joints_offset, self._mj_to_isaac],
+            outputs=[obs],
+            device=self._device,
+        )
 
-        obs = self._get_observation(qpos, qvel, previous_actions, cmd)
-        new_previous_actions, target_q = self._get_joint_target_from_obs(obs, cmd)
+        # Ensure observation kernel completes before ORT reads the buffer
+        wp.synchronize()
 
-        if single_input:
-            target_q = target_q.squeeze(0)
-            new_previous_actions = new_previous_actions.squeeze(0)
+        actions = wp.zeros((batch_size, POLICY_OUTPUT_DIM), dtype=wp.float32, device=self._device)
+        self._run_policy(obs, actions)
 
-        return target_q, new_previous_actions
+        target_q = wp.zeros((batch_size, 19), dtype=wp.float32, device=self._device)
+        wp.launch(
+            compute_targets_kernel,
+            dim=batch_size,
+            inputs=[actions, cmd, self._legs_offset, self._isaac_to_mj, self.action_scale],
+            outputs=[target_q],
+            device=self._device,
+        )
+
+        return target_q, actions
 
     def reset(self) -> None:
         """Reset internal state (no-op since previous_actions is now external)."""
-
-    def _mujoco_to_isaac_batch(self, x: torch.Tensor) -> torch.Tensor:
-        """Convert batched joint data from MuJoCo to Isaac format."""
-        return x[:, self.mujoco_to_isaac_indices]
-
-    def _isaac_to_mujoco_batch(self, x: torch.Tensor) -> torch.Tensor:
-        """Convert batched joint data from Isaac to MuJoCo format."""
-        return x[:, self.isaac_to_mujoco_indices]
 
     @property
     def target_frequency(self) -> float:

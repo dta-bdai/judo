@@ -9,7 +9,7 @@ import numpy as np
 from mujoco import MjData
 from omegaconf import DictConfig
 from scipy.interpolate import interp1d
-import torch
+import warp as wp
 
 
 from judo.app.structs import MujocoState, SplineData
@@ -95,9 +95,7 @@ class Controller:
                     num_threads=self.optimizer_cfg.num_rollouts,
                 )
 
-        self._last_policy_output = (
-            np.zeros((self.optimizer_cfg.num_rollouts, POLICY_OUTPUT_DIM)) if self.task.uses_locomotion_policy else None
-        )
+        self._last_policy_output = None
         self.action_normalizer = self._init_action_normalizer()
 
         # a container for any metadata from the system that we want to pass to the task
@@ -274,7 +272,7 @@ class Controller:
             else:
                 self.rollout_backend.update(self.optimizer_cfg.num_rollouts)
             if self._last_policy_output is not None:
-                self._last_policy_output = np.zeros((self.optimizer_cfg.num_rollouts, POLICY_OUTPUT_DIM))
+                self._last_policy_output = None
 
         normalizer_cls = normalizer_registry.get(self.action_normalizer_type)
         if normalizer_cls is None:
@@ -377,7 +375,7 @@ class Controller:
         self.update_spline(self.times, self.nominal_knots)
         # Reset policy output state for locomotion policy tasks
         if self.task.uses_locomotion_policy:
-            self._last_policy_output = np.zeros((self.optimizer_cfg.num_rollouts, POLICY_OUTPUT_DIM))
+            self._last_policy_output = None
 
     def update_traces(self) -> None:
         """Update traces by extracting data from sensors readings.
@@ -510,7 +508,7 @@ class BatchedControllers:
         self.timer_update_iter = Timer("Update Iter   ", unit="ms")
         self.timer_post_opt = Timer("Post Opt      ", unit="ms")
 
-        # Policy output state for hierarchical control (torch tensor, kept on GPU between rollouts)
+        # Policy output state for hierarchical control (warp array, kept on GPU between rollouts)
         self._last_policy_output = None
 
     def update_action(self) -> None:
@@ -634,7 +632,7 @@ class BatchedControllers:
         else:
             pa_np = np.stack([pa for pa in previous_actions_list if pa is not None], axis=0)
             pa_broadcast = np.repeat(pa_np, self.rollout_backend.num_threads, axis=0)
-            self._last_policy_output = torch.from_numpy(pa_broadcast).float().to(self.rollout_backend.device)
+            self._last_policy_output = wp.array(pa_broadcast, dtype=wp.float32, device=self.rollout_backend.device)
 
 
 def make_spline(times: np.ndarray, controls: np.ndarray, spline_order: str) -> interp1d:

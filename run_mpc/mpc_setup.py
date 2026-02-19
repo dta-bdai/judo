@@ -7,7 +7,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
-import torch
+import warp as wp
 
 from judo.controller import BatchedControllers as JudoBatchedController
 from judo.controller import ControllerConfig
@@ -45,7 +45,7 @@ def setup_mpc(
     """Create simulations, GPU rollout backend, and batched controllers."""
     use_spot = task.uses_locomotion_policy
     policy_path = str(config.locomotion_policy_path) if use_spot else None
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    device = "cuda:0" if wp.is_cuda_available() else "cpu"
     sims: list[MJSimulation] = []
 
     for _ in range(num_parallel):
