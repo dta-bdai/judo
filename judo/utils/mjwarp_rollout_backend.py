@@ -8,16 +8,27 @@ import torch
 import warp as wp
 from mujoco import MjData, MjModel
 
-from judo.controller.mj_controllers import (
-    MjBaseController,
-    PassThroughLocomotionController,
-)
+from judo.controller.batched_spot_locomotion import BatchedSpotLocomotion
 from judo.utils.rollout_backend import RolloutBackend
 from judo.utils.timer import Timer
 
 NCONMAX = 256
 NJMAX = 900
 DEVICE = "cuda:0"
+
+
+class PassThroughController:
+    """Passes commands through as target joint positions (no locomotion policy)."""
+
+    def compute_batch(self, cmd, qpos, qvel, previous_actions):
+        return cmd, None
+
+    def reset(self):
+        pass
+
+    @property
+    def target_frequency(self):
+        return float("inf")
 
 
 class MJWarpRolloutBackend(RolloutBackend):
@@ -33,7 +44,7 @@ class MJWarpRolloutBackend(RolloutBackend):
         model: MjModel,
         num_threads: int,
         num_problems: int = 1,
-        locomotion_controller: MjBaseController | None = None,
+        locomotion_controller: BatchedSpotLocomotion | None = None,
         device: str = DEVICE,
     ) -> None:
         """Initialize the backend with optional hierarchical control.
@@ -42,7 +53,7 @@ class MJWarpRolloutBackend(RolloutBackend):
             model: MuJoCo model.
             num_threads: Number of parallel rollouts per problem.
             num_problems: Number of independent problems.
-            locomotion_controller: Locomotion policy (e.g. BatchedSpotLocomotionController) or None.
+            locomotion_controller: Locomotion policy (e.g. BatchedSpotLocomotion) or None.
             device: Device for GPU operations.
         """
         assert device != "cpu", "RolloutBackend requires a GPU device."
@@ -75,7 +86,7 @@ class MJWarpRolloutBackend(RolloutBackend):
         self.mjw_step_graph = capture.graph
 
         # Initialize hierarchical control (optional)
-        self.locomotion_controller = locomotion_controller if locomotion_controller else PassThroughLocomotionController()
+        self.locomotion_controller = locomotion_controller if locomotion_controller else PassThroughController()
 
         # Calculate policy decimation
         physics_dt = model.opt.timestep

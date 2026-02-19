@@ -11,7 +11,7 @@ import torch
 
 from judo.controller import BatchedControllers as JudoBatchedController
 from judo.controller import ControllerConfig
-from judo.controller.spot_locomotion import BatchedSpotLocomotionController
+from judo.controller.batched_spot_locomotion import BatchedSpotLocomotion
 from judo.optimizers import Optimizer
 from judo.simulation.mj_simulation import MJSimulation
 from judo.simulation.policy_mj_simulation import PolicyMJSimulation
@@ -23,12 +23,12 @@ from mpc_config import PublicMPCConfig, SizeData, make_size_data
 
 def make_locomotion_controller(
     use_spot: bool, policy_path: str | None, device: str
-) -> BatchedSpotLocomotionController | None:
+) -> BatchedSpotLocomotion | None:
     """Creates low-level locomotion controller if Spot task is used."""
     if not use_spot or policy_path is None:
         return None
 
-    return BatchedSpotLocomotionController(
+    return BatchedSpotLocomotion(
         model_path=policy_path,
         device=device,
     )

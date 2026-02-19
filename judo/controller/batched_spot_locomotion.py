@@ -5,27 +5,18 @@
 from pathlib import Path
 
 import numpy as np
-import numpy.typing as npt
 import torch
-from mujoco import MjData
 from torch import nn
 
-from judo.controller.mj_controllers import MjBaseController
 from judo.tasks.spot.spot_constants import (
     ISAAC_TO_MUJOCO_INDICES_12,
     LOCOMOTION_DEFAULT_JOINTS_OFFSET,
     LOCOMOTION_DEFAULT_LEGS_OFFSET,
     MUJOCO_TO_ISAAC_INDICES_19,
-    RL_LOCOMOTION_COMMAND_LENGTH,
 )
 
 
-class BatchedSpotLocomotionController(
-    nn.Module,
-    MjBaseController[
-        tuple[torch.Tensor, torch.Tensor], tuple[npt.NDArray, npt.NDArray]
-    ],
-):
+class BatchedSpotLocomotion(nn.Module):
     """Batched GPU-accelerated locomotion controller for Spot.
 
     This controller implements the learned locomotion policy that converts
@@ -252,57 +243,25 @@ class BatchedSpotLocomotionController(
 
         return actions, target_q
 
-    def compute(
-        self, data: MjData, cmd: np.ndarray, *other_inputs: np.ndarray | None
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Get target joint positions from high-level command (stateful controller).
-
-        Args:
-            data: MuJoCo data object with current state.
-            cmd: High-level command (25,) [base_vel(3), arm(7), legs(12), torso(3)].
-            *other_inputs: Optional previous_actions (12,). If not provided, initializes to zeros.
-
-        Returns:
-            Tuple of (target_q, new_previous_actions):
-            - target_q: Target joint positions (19,) as numpy array.
-            - new_previous_actions: New previous actions (12,) to use in next call.
-        """
-        assert len(other_inputs) == 1, "Expected previous_actions as the only other input."
-        previous_actions = other_inputs[0]
-
-        qpos_torch = torch.from_numpy(data.qpos.copy()).float().to(self.device)
-        qvel_torch = torch.from_numpy(data.qvel.copy()).float().to(self.device)
-        cmd_torch = torch.from_numpy(cmd).float().to(self.device)
-
-        previous_actions_torch = None
-        if previous_actions is not None:
-            previous_actions_torch = (
-                torch.from_numpy(previous_actions).float().to(self.device)
-            )
-
-        target_q_torch, new_previous_actions_torch = self.compute_batch(
-            cmd_torch, qpos_torch, qvel_torch, previous_actions_torch
-        )
-
-        return target_q_torch.cpu().numpy(), new_previous_actions_torch.cpu().numpy()
-
     @torch.no_grad()
     def compute_batch(
         self,
         cmd: torch.Tensor,
-        *state_inputs: torch.Tensor,
-    ) -> tuple[torch.Tensor | np.ndarray, torch.Tensor]:
+        qpos: torch.Tensor,
+        qvel: torch.Tensor,
+        previous_actions: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Get target joint positions from high-level command (batched interface).
 
         Args:
             cmd: High-level command (batch_size, 25) or (25,).
-            *state_inputs: State inputs (qpos, qvel, previous_actions).
+            qpos: Joint positions (batch_size, nq) or (nq,).
+            qvel: Joint velocities (batch_size, nv) or (nv,).
+            previous_actions: Previous actions (batch_size, 12) or None.
 
         Returns:
             Tuple of (target_q, new_previous_actions).
         """
-        assert len(state_inputs) == 3, "Expected 3 state inputs: qpos, qvel, previous_actions."
-        qpos, qvel, previous_actions = state_inputs[0], state_inputs[1], state_inputs[2]
 
         single_input = cmd.ndim == 1
         if single_input:
@@ -344,18 +303,6 @@ class BatchedSpotLocomotionController(
     def _isaac_to_mujoco_batch(self, x: torch.Tensor) -> torch.Tensor:
         """Convert batched joint data from Isaac to MuJoCo format."""
         return x[:, self.isaac_to_mujoco_indices]
-
-    def validate_command(self, cmd: np.ndarray) -> None:
-        """Validate that command has the correct format."""
-        if cmd.ndim not in (1, 2):
-            raise ValueError(f"Command must be 1D or 2D array, got shape {cmd.shape}")
-
-        cmd_dim = cmd.shape[-1]
-        if cmd_dim != RL_LOCOMOTION_COMMAND_LENGTH:
-            raise ValueError(
-                f"Command must have {RL_LOCOMOTION_COMMAND_LENGTH} dimensions "
-                f"[base_vel(3), arm(7), legs(12), torso(3)], got {cmd_dim}"
-            )
 
     @property
     def target_frequency(self) -> float:
