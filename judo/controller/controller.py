@@ -1,16 +1,16 @@
 # Copyright (c) 2025 Robotics and AI Institute LLC. All rights reserved.
 
+from __future__ import annotations
+
 import copy
 import warnings
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from mujoco import MjData
 from omegaconf import DictConfig
 from scipy.interpolate import interp1d
-import warp as wp
-
 
 from judo.app.structs import MujocoState, SplineData
 from judo.app.utils import register_optimizers_from_cfg, register_tasks_from_cfg
@@ -27,8 +27,10 @@ from judo.utils.normalization import (
     make_normalizer,
     normalizer_registry,
 )
-from judo.utils.mjwarp_rollout_backend import MJWarpRolloutBackend
 from judo.utils.policy_mj_rollout_backend import PolicyMJRolloutBackend
+
+if TYPE_CHECKING:
+    from judo.utils.mjwarp_rollout_backend import MJWarpRolloutBackend
 from judo.utils.rollout_backend import RolloutBackend
 from judo.utils.timer import Timer
 from judo.visualizers.utils import get_trace_sensors
@@ -77,10 +79,10 @@ class Controller:
         self.model = self.task.model
 
         # Initialize rollout backend (auto-select policy backend if task requires it)
-        if isinstance(rollout_backend, MJWarpRolloutBackend):
+        if not isinstance(rollout_backend, str):
+            # MJWarpRolloutBackend instance (avoid isinstance check to skip mujoco_warp import)
             self.rollout_backend = rollout_backend
         else:
-            assert isinstance(rollout_backend, str)
             if self.task.uses_locomotion_policy:
                 assert self.task.locomotion_policy_path is not None
                 self.rollout_backend: RolloutBackend = PolicyMJRolloutBackend(
@@ -632,6 +634,8 @@ class BatchedControllers:
         else:
             pa_np = np.stack([pa for pa in previous_actions_list if pa is not None], axis=0)
             pa_broadcast = np.repeat(pa_np, self.rollout_backend.num_threads, axis=0)
+            import warp as wp  # noqa: PLC0415
+
             self._last_policy_output = wp.array(pa_broadcast, dtype=wp.float32, device=self.rollout_backend.device)
 
 
