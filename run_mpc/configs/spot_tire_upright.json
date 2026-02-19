@@ -10,7 +10,7 @@
     "task": "spot_tire_upright",
     "task_config": {
         "fall_penalty": 10000.0,
-        "spot_fallen_threshold": 35,
+        "spot_fallen_threshold": 0.35,
         "w_goal": 60.0,
         "w_controls": 2.0,
         "orientation_error_smoothing_width": 1.0,

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from mujoco import MjData, MjModel
 
 from judo import MODEL_PATH
 from judo.tasks.spot.spot_base import SpotBase, SpotBaseConfig
@@ -32,6 +33,7 @@ class SpotBoxPushConfig(SpotBaseConfig):
     orientation_threshold: float = 0.5
     fall_penalty: float = 2500.0
     w_controls: float = 0.0
+    goal_distance_threshold: float = 0.5
     goal_position: np.ndarray = np_1d_field(
         np.array([0.0, 0.0, BOX_HALF_LENGTH]),
         names=["x", "y", "z"],
@@ -55,7 +57,6 @@ class SpotBoxPush(SpotBase[SpotBoxPushConfig]):
     ) -> None:
         """Initialize the SpotBoxPush task."""
         super().__init__(model_path=XML_PATH, use_arm=True, config=config)
-        self.body_pose_idx = self.get_joint_position_start_index("base")
         self.object_pose_idx = self.get_joint_position_start_index("box_joint")
         self.object_y_axis_idx = self.get_sensor_start_index("object_y_axis")
         self.gripper_pos_idx = self.get_sensor_start_index("trace_fngr_site")
@@ -104,6 +105,12 @@ class SpotBoxPush(SpotBase[SpotBoxPushConfig]):
             + gripper_proximity_reward
             + controls_reward
         )
+
+    def success(self, model: MjModel, data: MjData, metadata: dict[str, Any] | None = None) -> bool:
+        """Check if the box reached the goal and Spot is still standing."""
+        object_pos = data.qpos[self.object_pose_idx : self.object_pose_idx + 3]
+        at_goal = np.linalg.norm(object_pos - self.config.goal_position) <= self.config.goal_distance_threshold
+        return bool(at_goal and super().success(model, data, metadata))
 
     @property
     def reset_pose(self) -> np.ndarray:

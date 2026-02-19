@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from mujoco import MjData, MjModel
 
 from judo import MODEL_PATH
 from judo.tasks.spot.spot_base import SpotBase, SpotBaseConfig
@@ -39,6 +40,7 @@ class SpotTireRollConfig(SpotBaseConfig):
     w_tire_linear_velocity: float = 10.0
     w_tire_angular_velocity: float = 0.30
     w_controls: float = 0.0
+    goal_distance_threshold: float = 0.5
     goal_position: np.ndarray = np_1d_field(
         np.array([0.0, 0.0, TIRE_RADIUS]),
         names=["x", "y", "z"],
@@ -62,7 +64,6 @@ class SpotTireRoll(SpotBase[SpotTireRollConfig]):
     ) -> None:
         """Initialize the SpotTireRoll task."""
         super().__init__(model_path=XML_PATH, use_arm=True, use_gripper=True, config=config)
-        self.body_pose_idx = self.get_joint_position_start_index("base")
         self.object_pose_idx = self.get_joint_position_start_index("tire_joint")
         self.gripper_pos_idx = self.get_sensor_start_index("trace_fngr_site")
         self.object_y_axis_idx = self.get_sensor_start_index("object_y_axis")
@@ -135,6 +136,14 @@ class SpotTireRoll(SpotBase[SpotTireRollConfig]):
             + tire_linear_velocity_reward
             + tire_angular_velocity_reward
         )
+
+    def success(self, model: MjModel, data: MjData, metadata: dict[str, Any] | None = None) -> bool:
+        """Check if the tire is at goal, upright, and Spot is still standing."""
+        object_pos = data.qpos[self.object_pose_idx : self.object_pose_idx + 3]
+        tire_y_axis = data.sensordata[self.object_y_axis_idx : self.object_y_axis_idx + 3]
+        at_goal = np.linalg.norm(object_pos - self.config.goal_position) <= self.config.goal_distance_threshold
+        upright = np.abs(tire_y_axis[2]) <= 0.1
+        return bool(at_goal and upright and super().success(model, data, metadata))
 
     @property
     def reset_pose(self) -> np.ndarray:

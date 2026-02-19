@@ -10,7 +10,7 @@ import numpy as np
 import tyro
 from judo.tasks import get_registered_tasks
 from judo.visualizers.model import ViserMjModel
-from mujoco import mj_forward
+from mujoco import MjData, mj_forward
 from viser import GuiEvent, ViserServer
 
 
@@ -51,6 +51,11 @@ def visualize_trajectory_batch(
     assert task_entry is not None, f"Task {task} is not registered!"
     task_cls, _ = task_entry
     task_instance = task_cls()
+    # Increase constraint buffers for contact-heavy scenes (e.g. Spot + tire).
+    task_instance.spec.nconmax = 512
+    task_instance.spec.njmax = 2048
+    task_instance.model = task_instance.spec.compile()
+    task_instance.data = MjData(task_instance.model)
     viser_mjmodel = ViserMjModel(server, task_instance.spec)
 
     # Create GUI elements for controlling visualizer.

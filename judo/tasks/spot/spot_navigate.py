@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from mujoco import MjData, MjModel
 
 from judo.tasks.spot.spot_base import SpotBase, SpotBaseConfig
 from judo.tasks.spot.spot_constants import LEGS_STANDING_POS, STANDING_HEIGHT
@@ -22,6 +23,7 @@ class SpotNavigateConfig(SpotBaseConfig):
     w_goal: float = 60.0
     fall_penalty: float = 2500.0
     w_controls: float = 0.0
+    goal_distance_threshold: float = 0.5
     goal_position: np.ndarray = np_1d_field(
         np.array([0.0, 0.0, STANDING_HEIGHT]),
         names=["x", "y", "z"],
@@ -45,7 +47,6 @@ class SpotNavigate(SpotBase[SpotNavigateConfig]):
     ) -> None:
         """Initialize the SpotNavigate task."""
         super().__init__(use_arm=False, config=config)
-        self.body_pose_idx = self.get_joint_position_start_index("base")
 
     def reward(
         self,
@@ -74,6 +75,12 @@ class SpotNavigate(SpotBase[SpotNavigateConfig]):
         assert controls_reward.shape == (batch_size,)
 
         return spot_fallen_reward + goal_reward + controls_reward
+
+    def success(self, model: MjModel, data: MjData, metadata: dict[str, Any] | None = None) -> bool:
+        """Check if Spot reached the goal and is still standing."""
+        body_pos = data.qpos[self.body_pose_idx : self.body_pose_idx + 3]
+        at_goal = np.linalg.norm(body_pos - self.config.goal_position) <= self.config.goal_distance_threshold
+        return bool(at_goal and super().success(model, data, metadata))
 
     @property
     def reset_pose(self) -> np.ndarray:

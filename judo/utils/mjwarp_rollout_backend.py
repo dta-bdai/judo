@@ -2,8 +2,6 @@
 
 """GPU-accelerated rollout backend using mujoco_warp (NVIDIA Warp)."""
 
-import warnings
-
 import mujoco_warp as mjw
 import numpy as np
 import torch
@@ -12,7 +10,6 @@ from mujoco import MjData, MjModel
 
 from judo.controller.mj_controllers import (
     MjBaseController,
-    MjPassThroughController,
     PassThroughLocomotionController,
 )
 from judo.utils.rollout_backend import RolloutBackend
@@ -45,7 +42,7 @@ class MJWarpRolloutBackend(RolloutBackend):
             model: MuJoCo model.
             num_threads: Number of parallel rollouts per problem.
             num_problems: Number of independent problems.
-            locomotion_controller: Locomotion policy (BatchedSpotLocomotionController or MjPassThroughController).
+            locomotion_controller: Locomotion policy (e.g. BatchedSpotLocomotionController) or None.
             device: Device for GPU operations.
         """
         assert device != "cpu", "RolloutBackend requires a GPU device."
@@ -91,12 +88,6 @@ class MJWarpRolloutBackend(RolloutBackend):
         self.timer_cpu_to_gpu = Timer("CPU->GPU", unit="ms")
         self.timer_rollout = Timer("Rollout ", unit="ms")
         self.timer_gpu_to_cpu = Timer("GPU->CPU", unit="ms")
-
-        warnings.warn(
-            "Field has no default value to reset to and no override for key. Its current value remains unchanged.",
-            UserWarning,
-            stacklevel=2,
-        )
 
     def set_init_previous_actions(self, previous_actions_list: list[np.ndarray | None]) -> None:
         """Set initial previous actions from list of per-problem states (synced from sims).
