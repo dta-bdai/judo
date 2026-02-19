@@ -1,16 +1,16 @@
 # Copyright (c) 2025 Robotics and AI Institute LLC. All rights reserved.
 
-from __future__ import annotations
-
 import copy
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 import numpy as np
-from mujoco import MjData, MjModel
+from mujoco import MjData
 from omegaconf import DictConfig
 from scipy.interpolate import interp1d
+import torch
+
 
 from judo.app.structs import MujocoState, SplineData
 from judo.app.utils import register_optimizers_from_cfg, register_tasks_from_cfg
@@ -510,6 +510,9 @@ class BatchedControllers:
         self.timer_update_iter = Timer("Update Iter   ", unit="ms")
         self.timer_post_opt = Timer("Post Opt      ", unit="ms")
 
+        # Policy output state for hierarchical control (torch tensor, kept on GPU between rollouts)
+        self._last_policy_output = None
+
     def update_action(self) -> None:
         """Update all controllers with coordinated batched rollouts.
 
@@ -566,13 +569,14 @@ class BatchedControllers:
             [ctrl.task.task_to_sim_ctrl(ctrl.rollout_controls) for ctrl in self.controllers], axis=0
         )
 
-        # Execute the batched rollout
-        all_states, all_sensors, all_previous_actions = self.rollout_backend.rollout(
+        # Execute the batched rollout (policy output tensor is passed through directly)
+        all_states, all_sensors, self._last_policy_output = self.rollout_backend.rollout(
             x0_stacked,
             controls_batched,
+            self._last_policy_output,
         )
 
-        # Distribute results back to each controller
+        # Distribute states/sensors back to each controller
         num_threads = self.rollout_backend.num_threads
         for i, ctrl in enumerate(self.controllers):
             start_idx = i * num_threads
@@ -584,6 +588,7 @@ class BatchedControllers:
         """Reset all controllers."""
         for ctrl in self.controllers:
             ctrl.reset()
+        self._last_policy_output = None
 
     def print_timer_stats(self) -> None:
         """Print timing statistics for update_action() breakdown."""
@@ -617,12 +622,19 @@ class BatchedControllers:
             ctrl.update_states(state_msg)
 
     def set_init_previous_actions(self, previous_actions_list: list[np.ndarray | None]) -> None:
-        """Sync previous_actions from sims directly to RolloutBackend.
+        """Sync previous_actions from sims to the batched policy output state.
+
+        Broadcasts per-problem actions to all threads.
 
         Args:
             previous_actions_list: List of previous actions arrays, one per controller/problem.
         """
-        self.rollout_backend.set_init_previous_actions(previous_actions_list)
+        if all(pa is None for pa in previous_actions_list):
+            self._last_policy_output = None
+        else:
+            pa_np = np.stack([pa for pa in previous_actions_list if pa is not None], axis=0)
+            pa_broadcast = np.repeat(pa_np, self.rollout_backend.num_threads, axis=0)
+            self._last_policy_output = torch.from_numpy(pa_broadcast).float().to(self.rollout_backend.device)
 
 
 def make_spline(times: np.ndarray, controls: np.ndarray, spline_order: str) -> interp1d:

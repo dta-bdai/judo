@@ -89,28 +89,12 @@ class MJWarpRolloutBackend(RolloutBackend):
         self.timer_rollout = Timer("Rollout ", unit="ms")
         self.timer_gpu_to_cpu = Timer("GPU->CPU", unit="ms")
 
-    def set_init_previous_actions(self, previous_actions_list: list[np.ndarray | None]) -> None:
-        """Set initial previous actions from list of per-problem states (synced from sims).
-
-        Broadcasts per-problem actions to all threads, so self.init_previous_actions is
-        ready to use in rollout() without further processing.
-
-        Args:
-            previous_actions_list: List of previous_actions, one per problem.
-        """
-        if all(pa is None for pa in previous_actions_list):
-            self.init_previous_actions = None
-        else:
-            pa_np = np.stack([pa for pa in previous_actions_list if pa is not None], axis=0)
-            pa_broadcast = np.repeat(pa_np, self.num_threads, axis=0)
-            self.init_previous_actions = torch.from_numpy(pa_broadcast).float().to(self.device)
-
     def rollout(
         self,
         x0: np.ndarray,
         controls: np.ndarray,
-        last_policy_output: np.ndarray | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+        last_policy_output: torch.Tensor | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, torch.Tensor | None]:
         """Conduct a GPU-accelerated rollout using mujoco_warp.
 
         Supports both single-problem and multi-problem modes:
@@ -120,11 +104,14 @@ class MJWarpRolloutBackend(RolloutBackend):
         Args:
             x0: Initial state(s) as [qpos, qvel] (no time).
             controls: Control inputs.
+            last_policy_output: Previous policy outputs as torch.Tensor on GPU,
+                shape (num_worlds, policy_dim), or None.
 
         Returns:
-            Tuple of (states, sensors):
+            Tuple of (states, sensors, policy_output):
             - states: shape (num_worlds, horizon, nq + nv)
             - sensors: shape (num_worlds, horizon, nsensordata)
+            - policy_output: Final policy outputs as torch.Tensor on GPU, or None.
         """
         nq = self.model.nq
         nv = self.model.nv
@@ -168,7 +155,7 @@ class MJWarpRolloutBackend(RolloutBackend):
         qvel_wp = wp.zeros((num_worlds, nv), dtype=wp.float32)
         target_q_torch = None
 
-        previous_actions_torch = self.init_previous_actions
+        previous_actions_torch = last_policy_output
 
         for t in range(horizon):
             wp.synchronize()
