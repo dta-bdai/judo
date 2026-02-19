@@ -27,7 +27,7 @@ from judo.tasks import (
 from judo.tasks import (
     get_registered_tasks as get_registered_judo_tasks,
 )
-from judo.tasks.spot.spot_constants import SPOT_LOCOMOTION_PT_PATH
+from judo.tasks.spot.spot_constants import SPOT_LOCOMOTION_POLICY_PATH
 from judo.utils.timer import Timer
 
 
@@ -55,7 +55,7 @@ class PublicMPCConfig:
     store_rollouts: bool = True  # Store open loop control inputs and state trajectories.
     store_viapoints: bool = True  # Store open loop control of the best spline.
     visualize: bool = False
-    locomotion_policy_path: Path = SPOT_LOCOMOTION_PT_PATH
+    locomotion_policy_path: Path = SPOT_LOCOMOTION_POLICY_PATH
 
 
 @dataclass

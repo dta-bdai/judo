@@ -5,6 +5,8 @@
 from pathlib import Path
 
 import numpy as np
+import onnx
+import onnxruntime as ort
 import torch
 from torch import nn
 
@@ -13,6 +15,7 @@ from judo.tasks.spot.spot_constants import (
     LOCOMOTION_DEFAULT_JOINTS_OFFSET,
     LOCOMOTION_DEFAULT_LEGS_OFFSET,
     MUJOCO_TO_ISAAC_INDICES_19,
+    POLICY_OUTPUT_DIM,
 )
 
 
@@ -37,7 +40,7 @@ class BatchedSpotLocomotion(nn.Module):
         """Initialize the batched locomotion controller.
 
         Args:
-            model_path: Path to the pre-trained locomotion policy (.pt file).
+            model_path: Path to the pre-trained locomotion policy (.onnx file).
             device: The torch device to load the model and run inference on.
             action_scale: Scaling factor for the action. Defaults to 0.2.
         """
@@ -45,29 +48,23 @@ class BatchedSpotLocomotion(nn.Module):
         self.device = device
         self.action_scale = action_scale
 
-        # Load locomotion policy network
-        self.locomotion_actor = nn.Sequential(
-            nn.Linear(in_features=84, out_features=512),
-            nn.ELU(alpha=1.0),
-            nn.Linear(in_features=512, out_features=256),
-            nn.ELU(alpha=1.0),
-            nn.Linear(in_features=256, out_features=128),
-            nn.ELU(alpha=1.0),
-            nn.Linear(in_features=128, out_features=12),
-        )
+        # Parse device string to get CUDA device id
+        torch_device = torch.device(device)
+        self._device_id = torch_device.index or 0
 
-        # Load weights
-        model_path_str = str(model_path)
-        state_dict = torch.load(
-            model_path_str, map_location=torch.device("cpu"), weights_only=True
-        )
-        self.locomotion_actor.load_state_dict(state_dict)
-        self.locomotion_actor.to(self.device)
-        self.locomotion_actor.eval()
+        # Load ONNX model and make batch dimension dynamic (on-disk file
+        # keeps batch=1 for the C++ rollout code; Python needs dynamic batch).
+        onnx_model = onnx.load(str(model_path))
+        for tensor in list(onnx_model.graph.input) + list(onnx_model.graph.output):
+            tensor.type.tensor_type.shape.dim[0].ClearField("dim_value")
+            tensor.type.tensor_type.shape.dim[0].dim_param = "batch"
 
-        # JIT compile for kernel fusion
-        example_input = torch.randn(1, 84, device=self.device)
-        self.locomotion_actor = torch.jit.trace(self.locomotion_actor, example_input)
+        self._ort_session = ort.InferenceSession(
+            onnx_model.SerializeToString(),
+            providers=[("CUDAExecutionProvider", {"device_id": self._device_id})],
+        )
+        self._ort_input_name = self._ort_session.get_inputs()[0].name
+        self._ort_output_name = self._ort_session.get_outputs()[0].name
 
         # Locomotion policy default joint offsets (for input normalization & target offset)
         default_joints_offset = np.array(
@@ -104,6 +101,37 @@ class BatchedSpotLocomotion(nn.Module):
                 ISAAC_TO_MUJOCO_INDICES_12, dtype=torch.long, device=self.device
             ),
         )
+
+    def _run_policy(self, obs: torch.Tensor) -> torch.Tensor:
+        """Run the locomotion policy via ONNX Runtime with GPU I/O binding.
+
+        Args:
+            obs: Observation tensor on GPU (batch_size, 84).
+
+        Returns:
+            Actions tensor on GPU (batch_size, POLICY_OUTPUT_DIM).
+        """
+        obs = obs.contiguous()
+        actions = torch.empty(obs.shape[0], POLICY_OUTPUT_DIM, dtype=torch.float32, device=self.device)
+        io_binding = self._ort_session.io_binding()
+        io_binding.bind_input(
+            name=self._ort_input_name,
+            device_type="cuda",
+            device_id=self._device_id,
+            element_type=np.float32,
+            shape=tuple(obs.shape),
+            buffer_ptr=obs.data_ptr(),
+        )
+        io_binding.bind_output(
+            name=self._ort_output_name,
+            device_type="cuda",
+            device_id=self._device_id,
+            element_type=np.float32,
+            shape=tuple(actions.shape),
+            buffer_ptr=actions.data_ptr(),
+        )
+        self._ort_session.run_with_iobinding(io_binding)
+        return actions
 
     @staticmethod
     def quat_rotate_inverse(quat: torch.Tensor, vec: torch.Tensor) -> torch.Tensor:
@@ -154,7 +182,7 @@ class BatchedSpotLocomotion(nn.Module):
         Args:
             qpos: Joint positions (batch_size, nq). First 7 are base pose (pos + quat).
             qvel: Joint velocities (batch_size, nv). First 6 are base velocity (linear + angular).
-            previous_actions: Previous actions vector (batch_size, 12).
+            previous_actions: Previous actions vector (batch_size, POLICY_OUTPUT_DIM).
             cmd: Command vector for the base and arm (batch_size, 25).
 
         Returns:
@@ -209,16 +237,15 @@ class BatchedSpotLocomotion(nn.Module):
 
         Returns:
             Tuple of (actions, target_q):
-                - actions: Raw Isaac policy output (batch_size, 12) - Isaac order
+                - actions: Raw Isaac policy output (batch_size, POLICY_OUTPUT_DIM) - Isaac order
                 - target_q: Target joint positions (batch_size, 19) - Mujoco order
         """
         batch_size = obs.shape[0]
 
-        with torch.inference_mode():
-            actions = self.locomotion_actor(obs)  # (batch_size, 12)
+        actions = self._run_policy(obs)  # (batch_size, POLICY_OUTPUT_DIM)
 
         arm_joint_command = cmd[:, 3:10]  # (batch_size, 7)
-        leg_joint_command = cmd[:, 10:22]  # (batch_size, 12)
+        leg_joint_command = cmd[:, 10:22]  # (batch_size, POLICY_OUTPUT_DIM - 7)
 
         target_leg = self._isaac_to_mujoco_batch(
             actions * self.action_scale + self.legs_offset
@@ -257,7 +284,7 @@ class BatchedSpotLocomotion(nn.Module):
             cmd: High-level command (batch_size, 25) or (25,).
             qpos: Joint positions (batch_size, nq) or (nq,).
             qvel: Joint velocities (batch_size, nv) or (nv,).
-            previous_actions: Previous actions (batch_size, 12) or None.
+            previous_actions: Previous actions (batch_size, POLICY_OUTPUT_DIM) or None.
 
         Returns:
             Tuple of (target_q, new_previous_actions).

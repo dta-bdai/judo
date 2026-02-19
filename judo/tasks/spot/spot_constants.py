@@ -13,7 +13,6 @@ from judo import MODEL_PATH
 
 # Locomotion policy path (Xinghao's v1 policy from starfish)
 SPOT_LOCOMOTION_POLICY_PATH = MODEL_PATH / "policies" / "spot_locomotion.onnx"
-SPOT_LOCOMOTION_PT_PATH = MODEL_PATH / "policies" / "spot_locomotion.pt"
 
 # Default rollout cutoff time (125ms for 8Hz MPC)
 DEFAULT_SPOT_ROLLOUT_CUTOFF_TIME: float = 0.125
