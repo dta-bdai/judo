@@ -10,12 +10,7 @@ import numpy as np
 import pytest
 
 try:
-    import h5py
     import warp as wp
-
-    from run_mpc.mpc_batch import run_mpc_batch
-    from run_mpc.mpc_config import MPCTimers, PublicMPCConfig, decode_config, load_configs_from_json_data
-    from run_mpc.mpc_setup import clamp_for_mjwarp, save_results_to_h5, setup_mpc
 
     _has_gpu = wp.is_cuda_available()
 except ImportError:
@@ -25,6 +20,12 @@ except ImportError:
 # since run_mpc imports warp at module level.
 if not _has_gpu:
     pytest.skip("requires CUDA GPU (warp)", allow_module_level=True)
+
+import h5py
+
+from run_mpc.mpc_batch import run_mpc_batch
+from run_mpc.mpc_config import MPCTimers, PublicMPCConfig, decode_config, load_configs_from_json_data
+from run_mpc.mpc_setup import clamp_for_mjwarp, save_results_to_h5, setup_mpc
 
 CONFIGS_DIR = Path(__file__).resolve().parent.parent / "run_mpc" / "configs"
 
