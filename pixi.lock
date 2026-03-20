@@ -5833,7 +5833,7 @@ packages:
 - pypi: ./
   name: judo-rai
   version: 0.0.7
-  sha256: 6a4a6654a401fc22641750f0aa84ef3d1ee4e0c6520a9a0eb189665c6bf787ae
+  sha256: 11846071eb8423c19be235d99baf83a0c57d1f562eaf8f1889ef0c8f93e6208a
   requires_dist:
   - dora-utils
   - h5py

@@ -222,6 +222,7 @@ run_mpc = { cmd = "run_mpc", description = "Run batched MPC (pass args after --)
 
 [tool.pixi.activation.env]
 LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
+PYTHONNOUSERSITE = "1"
 
 [tool.pixi.feature.py310.dependencies]
 python = "3.10.*"

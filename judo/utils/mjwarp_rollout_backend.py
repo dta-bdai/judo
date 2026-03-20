@@ -116,7 +116,6 @@ class MJWarpRolloutBackend(RolloutBackend):
 
         # Initialize hierarchical control (optional)
         self.locomotion_controller = locomotion_controller if locomotion_controller else PassThroughController()
-        self._uses_locomotion_policy = locomotion_controller is not None
 
         # Calculate policy decimation
         physics_dt = model.opt.timestep
@@ -154,6 +153,7 @@ class MJWarpRolloutBackend(RolloutBackend):
         """
         nq = self.model.nq
         nv = self.model.nv
+        nu = self.model.nu
         nsensordata = self.model.nsensordata
         horizon = controls.shape[1]
 
@@ -180,7 +180,6 @@ class MJWarpRolloutBackend(RolloutBackend):
         out_qvel_wp = wp.zeros((num_worlds, horizon, nv), dtype=wp.float32)
         out_sensors_wp = wp.zeros((num_worlds, horizon, nsensordata), dtype=wp.float32)
 
-        # warp stubs type array slices as indexedarray, but wp.copy accepts them at runtime
         wp.copy(self.mjw_data.time, full_states_wp[:, 0])  # pyright: ignore[reportArgumentType]
         wp.copy(self.mjw_data.qpos, full_states_wp[:, 1 : nq + 1])  # pyright: ignore[reportArgumentType]
         wp.copy(self.mjw_data.qvel, full_states_wp[:, 1 + nq : nq + nv + 1])  # pyright: ignore[reportArgumentType]
@@ -190,26 +189,46 @@ class MJWarpRolloutBackend(RolloutBackend):
         # GPU rollout loop
         self.timer_rollout.tic()
 
-        if self._uses_locomotion_policy:
-            previous_actions_wp = self._rollout_with_locomotion_policy(
-                num_worlds,
-                horizon,
-                nq,
-                nv,
-                controls_wp,
-                out_qpos_wp,
-                out_qvel_wp,
-                out_sensors_wp,
-                last_policy_output,
+        qpos_wp = wp.zeros((num_worlds, nq), dtype=wp.float32)
+        qvel_wp = wp.zeros((num_worlds, nv), dtype=wp.float32)
+        ctrl_wp = wp.zeros((num_worlds, nu), dtype=wp.float32)
+        target_q_wp = None
+
+        previous_actions_wp = last_policy_output
+
+        for t in range(horizon):
+            wp.synchronize()
+
+            cmd_wp = controls_wp[:, t, :]
+
+            # Update locomotion policy
+            if target_q_wp is None or self.global_step_counter % self.policy_decimation == 0:
+                target_q_wp, previous_actions_wp = self.locomotion_controller.compute_batch(
+                    cmd_wp,  # pyright: ignore[reportArgumentType]
+                    qpos_wp,
+                    qvel_wp,
+                    previous_actions_wp,
+                )
+
+            # Copy target_q into ctrl (pad remaining actuators with zeros)
+            n_controlled = target_q_wp.shape[1]
+            wp.launch(
+                _copy_target_to_ctrl,
+                dim=num_worlds,
+                inputs=[target_q_wp, ctrl_wp, n_controlled],
+                device=self.device,
             )
-        else:
-            previous_actions_wp = self._rollout_direct(
-                horizon,
-                controls_wp,
-                out_qpos_wp,
-                out_qvel_wp,
-                out_sensors_wp,
-            )
+            wp.copy(self.mjw_data.ctrl, ctrl_wp)
+
+            wp.capture_launch(self.mjw_step_graph)  # pyright: ignore[reportArgumentType]
+
+            self.global_step_counter += 1
+
+            wp.copy(qpos_wp, self.mjw_data.qpos)
+            wp.copy(qvel_wp, self.mjw_data.qvel)
+            wp.copy(out_qpos_wp[:, t, :], self.mjw_data.qpos)  # pyright: ignore[reportArgumentType]
+            wp.copy(out_qvel_wp[:, t, :], self.mjw_data.qvel)  # pyright: ignore[reportArgumentType]
+            wp.copy(out_sensors_wp[:, t, :], self.mjw_data.sensordata)  # pyright: ignore[reportArgumentType]
 
         wp.synchronize()
         self.timer_rollout.toc()
@@ -247,81 +266,6 @@ class MJWarpRolloutBackend(RolloutBackend):
         if np.any(np.isnan(sensors)):
             nan_worlds = np.any(np.isnan(sensors), axis=(1, 2))
             logger.warning(f"NaN in rollout sensors! {int(np.sum(nan_worlds))}/{sensors.shape[0]} worlds affected")
-
-    def _rollout_direct(
-        self,
-        horizon: int,
-        controls_wp: wp.array,
-        out_qpos_wp: wp.array,
-        out_qvel_wp: wp.array,
-        out_sensors_wp: wp.array,
-    ) -> None:
-        """Fast rollout path for direct control (no locomotion policy).
-
-        Pipelines all GPU operations with a single sync at the end (done by caller).
-        """
-        for t in range(horizon):
-            wp.copy(self.mjw_data.ctrl, controls_wp[:, t, :])  # pyright: ignore[reportArgumentType]
-            wp.capture_launch(self.mjw_step_graph)  # pyright: ignore[reportArgumentType]
-            wp.copy(out_qpos_wp[:, t, :], self.mjw_data.qpos)  # pyright: ignore[reportArgumentType]
-            wp.copy(out_qvel_wp[:, t, :], self.mjw_data.qvel)  # pyright: ignore[reportArgumentType]
-            wp.copy(out_sensors_wp[:, t, :], self.mjw_data.sensordata)  # pyright: ignore[reportArgumentType]
-
-    def _rollout_with_locomotion_policy(
-        self,
-        num_worlds: int,
-        horizon: int,
-        nq: int,
-        nv: int,
-        controls_wp: wp.array,
-        out_qpos_wp: wp.array,
-        out_qvel_wp: wp.array,
-        out_sensors_wp: wp.array,
-        last_policy_output: wp.array | None,
-    ) -> wp.array | None:
-        """Rollout path for hierarchical control with locomotion policy."""
-        nu = self.model.nu
-        qpos_wp = wp.zeros((num_worlds, nq), dtype=wp.float32)
-        qvel_wp = wp.zeros((num_worlds, nv), dtype=wp.float32)
-        ctrl_wp = wp.zeros((num_worlds, nu), dtype=wp.float32)
-        target_q_wp = None
-        previous_actions_wp = last_policy_output
-
-        for t in range(horizon):
-            wp.synchronize()
-
-            cmd_wp = controls_wp[:, t, :]
-
-            # Update locomotion policy at the policy's target frequency
-            if target_q_wp is None or self.global_step_counter % self.policy_decimation == 0:
-                target_q_wp, previous_actions_wp = self.locomotion_controller.compute_batch(
-                    cmd_wp,  # pyright: ignore[reportArgumentType]
-                    qpos_wp,
-                    qvel_wp,
-                    previous_actions_wp,
-                )
-
-            # Copy target_q into ctrl (pad remaining actuators with zeros)
-            n_controlled = target_q_wp.shape[1]
-            wp.launch(
-                _copy_target_to_ctrl,
-                dim=num_worlds,
-                inputs=[target_q_wp, ctrl_wp, n_controlled],
-                device=self.device,
-            )
-            wp.copy(self.mjw_data.ctrl, ctrl_wp)
-
-            wp.capture_launch(self.mjw_step_graph)  # pyright: ignore[reportArgumentType]
-
-            self.global_step_counter += 1
-
-            wp.copy(qpos_wp, self.mjw_data.qpos)
-            wp.copy(qvel_wp, self.mjw_data.qvel)
-            wp.copy(out_qpos_wp[:, t, :], self.mjw_data.qpos)  # pyright: ignore[reportArgumentType]
-            wp.copy(out_qvel_wp[:, t, :], self.mjw_data.qvel)  # pyright: ignore[reportArgumentType]
-            wp.copy(out_sensors_wp[:, t, :], self.mjw_data.sensordata)  # pyright: ignore[reportArgumentType]
-
-        return previous_actions_wp
 
     def update(self, num_threads: int, num_problems: int = 1) -> None:
         """Update the backend with a new number of threads."""
