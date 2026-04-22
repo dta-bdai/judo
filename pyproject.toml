@@ -32,7 +32,7 @@ classifiers = [
 dependencies = [
     "dora-utils",  # dora + qol utils for writing nodes
     "h5py",
-    "mujoco>=3.5.0,<3.7",
+    "mujoco>=3.6.0,<3.7",
     "numpy",
     "pillow",  # for displaying app logo
     "pycparser",
@@ -237,7 +237,7 @@ python = "3.13.*"
 [tool.pixi.feature.mjwarp.dependencies]
 python = ">=3.11,<3.14"
 [tool.pixi.feature.mjwarp.target.linux-64.pypi-dependencies]
-mujoco_warp = ">=3.5.0,<3.7"
+mujoco_warp = ">=3.6.0,<3.7"
 onnx = "*"
 onnxruntime-gpu = ">=1.24"
 
