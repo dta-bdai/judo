@@ -1,5 +1,7 @@
 # Copyright (c) 2025 Robotics and AI Institute LLC. All rights reserved.
 
+import mujoco as _mujoco  # noqa: F401
+
 from mujoco_extensions.policy_rollout.policy_rollout_pybind.policy_rollout import (
     System,
     create_systems_vector,
