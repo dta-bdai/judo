@@ -347,9 +347,10 @@ def test_body_and_geom_naming(
 
         # Check the ViserMjModel gets parsed properly.
         expected_geom_names = [
-            f"{body_name}/geom_{geom_name}"
+            f"/{body_name}/geom_{geom_name}"
             for (body_name, geom_name) in zip(expected_bodies, expected_geoms, strict=True)
         ]
-        assert [b.name for b in model._bodies[1:]] == expected_bodies
+        _expected_bodies = [f"/{b}" for b in expected_bodies]
+        assert [b.name for b in model._bodies[1:]] == _expected_bodies
         model_geom_names = [g.name for g in model._geoms[1:]]
         assert model_geom_names == expected_geom_names
