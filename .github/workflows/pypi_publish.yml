@@ -163,7 +163,6 @@ jobs:
       - name: Smoke test — imports and C++ extension
         run: |
           source /tmp/test-venv/bin/activate
-          export LD_LIBRARY_PATH=$(python -c "import mujoco, os; print(os.path.dirname(mujoco.__file__))")
           python -c "
           from mujoco_extensions.policy_rollout import create_systems_vector, threaded_rollout
           print('mujoco_extensions OK')
@@ -187,7 +186,6 @@ jobs:
       - name: Run Spot tests
         run: |
           source /tmp/test-venv/bin/activate
-          export LD_LIBRARY_PATH=$(python -c "import mujoco, os; print(os.path.dirname(mujoco.__file__))")
           pytest tests/test_simulation/test_simulation.py::test_spot_simulation_init \
                  tests/test_simulation/test_simulation.py::test_spot_simulation_step \
                  tests/test_tasks/test_spot.py -v
