@@ -30,11 +30,12 @@ jobs:
           fi
 
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     needs: check-if-codeowner
     if: needs.check-if-codeowner.outputs.is_owner == 'true'
     strategy:
       matrix:
+        os: [ubuntu-22.04, macos-13, macos-14]
         python-version: ['3.10', '3.11', '3.12', '3.13']
         include:
           - python-version: '3.10'
@@ -59,14 +60,27 @@ jobs:
           environments: ${{ matrix.pixi-env }}
           cache: true
 
+      - name: Show runner info
+        run: |
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner arch: $RUNNER_ARCH"
+          uname -a
+
       - name: Build mujoco_extensions
         run: pixi run -e ${{ matrix.pixi-env }} build
 
       - name: Build wheel
         run: pixi run -e ${{ matrix.pixi-env }} python -m build --wheel --outdir dist
 
-      - name: Repair wheel
+      - name: Repair wheel (Linux)
+        if: runner.os == 'Linux'
         run: pixi run -e ${{ matrix.pixi-env }} bash scripts/repair_wheel.sh dist/*.whl wheelhouse "" ${{ matrix.python-tag }}
+
+      - name: Repair wheel (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          pixi run -e ${{ matrix.pixi-env }} python -m pip install delocate
+          pixi run -e ${{ matrix.pixi-env }} delocate-wheel -w wheelhouse dist/*.whl
 
       - name: Verify package
         run: pixi run -e ${{ matrix.pixi-env }} twine check wheelhouse/*.whl
@@ -74,7 +88,7 @@ jobs:
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v6
         with:
-          name: wheel-${{ matrix.python-version }}
+          name: wheel-${{ matrix.os }}-${{ matrix.python-version }}
           path: wheelhouse/*.whl
           retention-days: 7
 
@@ -135,7 +149,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04, ubuntu-24.04, macos-13, macos-14]
         python-version: ['3.10', '3.11', '3.12', '3.13']
 
     steps:
