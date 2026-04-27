@@ -79,8 +79,15 @@ jobs:
       - name: Repair wheel (macOS)
         if: runner.os == 'macOS'
         run: |
-          pixi run -e ${{ matrix.pixi-env }} python -m pip install delocate
-          pixi run -e ${{ matrix.pixi-env }} delocate-wheel -w wheelhouse dist/*.whl
+          python3 -m venv /tmp/delocate-venv
+          source /tmp/delocate-venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install delocate
+          # --ignore-missing-dependencies skips libs that can't be found on the
+          # build machine. libmujoco is intentionally absent here — it is
+          # provided by the mujoco pip package at runtime, same as --exclude
+          # in the Linux auditwheel repair_wheel.sh.
+          python -m delocate.cmd.delocate_wheel --ignore-missing-dependencies -w wheelhouse dist/*.whl
 
       - name: Verify package
         run: pixi run -e ${{ matrix.pixi-env }} twine check wheelhouse/*.whl
