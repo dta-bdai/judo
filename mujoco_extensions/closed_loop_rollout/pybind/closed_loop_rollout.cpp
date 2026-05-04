@@ -10,7 +10,7 @@
 #include <memory>
 #include <vector>
 
-namespace mujoco_extensions::pybind::policy_rollout {
+namespace mujoco_extensions::pybind::closed_loop_rollout {
 
 namespace py = pybind11;
 
@@ -24,14 +24,14 @@ using EigenTypes::VectorT;
 using EigenTypes::VectorTList;
 
 /**
- * Bindings for `policy_rollout` submodule.
+ * Bindings for `closed_loop_rollout` submodule.
  */
-void bindPolicyRollout(const std::reference_wrapper<py::module>& root) {
+void bindClosedLoopRollout(const std::reference_wrapper<py::module>& root) {
   using pybind11::literals::operator""_a;
 
   Eigen::setNbThreads(OMP_NUM_THREADS);
-  // Create `policy_rollout` submodule.
-  auto python_module = root.get().def_submodule("policy_rollout");
+  // Create `closed_loop_rollout` submodule.
+  auto python_module = root.get().def_submodule("closed_loop_rollout");
 
   python_module.def(
       "set_state",
@@ -63,7 +63,7 @@ void bindPolicyRollout(const std::reference_wrapper<py::module>& root) {
            "reset_last_output"_a = true, "cutoff_time"_a = SystemClass::kInfiniteTime);  // Match C++
 
   python_module.def("threaded_rollout", &SystemClass::threadedRollout,
-                    "Threaded policy rollout with shared pointers to System objects.", "systems"_a, "states"_a,
+                    "Threaded closed-loop rollout with shared pointers to System objects.", "systems"_a, "states"_a,
                     "command"_a, "last_policy_output"_a, "num_threads"_a, "physics_substeps"_a,
                     "cutoff_time"_a = SystemClass::kInfiniteTime);
 
@@ -79,4 +79,4 @@ void bindPolicyRollout(const std::reference_wrapper<py::module>& root) {
       "model"_a, "policy_filepath"_a, "num_systems"_a);
 }
 
-}  // namespace mujoco_extensions::pybind::policy_rollout
+}  // namespace mujoco_extensions::pybind::closed_loop_rollout

@@ -105,24 +105,24 @@ target_link_libraries(system PUBLIC
   onnx_interface
 )
 
-# --- Policy Rollout pybind module ---
-pybind11_add_module(policy_rollout_pybind
-  policy_rollout/pybind/pybind.cpp
-  policy_rollout/pybind/policy_rollout.cpp
+# --- Closed-loop Rollout pybind module ---
+pybind11_add_module(closed_loop_rollout_pybind
+  closed_loop_rollout/pybind/pybind.cpp
+  closed_loop_rollout/pybind/closed_loop_rollout.cpp
 )
-target_compile_options(policy_rollout_pybind PRIVATE
+target_compile_options(closed_loop_rollout_pybind PRIVATE
   -fopenmp
   -mtune=native
 )
-target_link_libraries(policy_rollout_pybind PRIVATE
+target_link_libraries(closed_loop_rollout_pybind PRIVATE
   Eigen3::Eigen
   OpenMP::OpenMP_CXX
   system
   ${MUJOCO_LIB}
 )
-set_target_properties(policy_rollout_pybind PROPERTIES
+set_target_properties(closed_loop_rollout_pybind PROPERTIES
   BUILD_RPATH "$ORIGIN/../../mujoco"
   INSTALL_RPATH "$ORIGIN/../../mujoco"
   BUILD_RPATH_USE_ORIGIN TRUE
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/policy_rollout"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/closed_loop_rollout"
 )

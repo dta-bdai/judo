@@ -20,13 +20,13 @@ from judo.tasks.spot import (
 #   base only: 3
 #   base + arm: 10 (3 base + 7 arm)
 #   base + arm + gripper: 11 (3 base + 7 arm + 1 gripper_selection)
-#   base + arm + legs: 17 (3 base + 7 arm + 6 legs + 1 leg_selection)
+#   base + arm + legs: 16 (3 base + 7 arm + 6 legs)  # locomotion_v1.onnx has leg-selection baked in
 #   base + arm + torso: 13 (3 base + 7 arm + 3 torso)
 #   base + arm + gripper + torso: 14 (3 base + 7 arm + 1 gripper_selection + 3 torso)
 SPOT_TASKS = [
     (SpotBase, 10),  # use_arm=True
     (SpotNavigate, 3),  # use_arm=False, base only
-    (SpotTireUpright, 17),  # use_arm=True, use_legs=True: 3+7+6+1
+    (SpotTireUpright, 17),  # use_arm=True, use_legs=True: 3+7+6+1 (leg_selection)
     (SpotTireRoll, 11),  # use_arm=True, use_gripper=True
     (SpotBoxPush, 10),  # use_arm=True
 ]

@@ -23,7 +23,7 @@ def test_spot_tire_upright_init() -> None:
     assert task.name == "spot_tire_upright"
     assert task.physics_substeps == 2
     assert task.locomotion_policy_path is not None
-    # Base + arm + legs + leg_selection = 3 + 7 + 6 + 1 = 17
+    # Base + arm + legs = 3 + 7 + 6 = 16 (locomotion_v1.onnx has leg-selection logic baked in)
     assert task.nu == 17
 
 
@@ -70,3 +70,17 @@ def test_spot_base_actuator_ctrlrange() -> None:
     task = SpotBase()
     ctrlrange = task.actuator_ctrlrange
     assert ctrlrange.shape == (task.nu, 2)
+
+
+def test_spot_base_action_components_front_leg_order() -> None:
+    """Front leg component labels should match FL-then-FR command ordering."""
+    task = SpotBase(use_arm=False, use_legs=True)
+    components = task.get_action_components()
+    assert components[3:9] == [
+        "spot/fl_hx",
+        "spot/fl_hy",
+        "spot/fl_kn",
+        "spot/fr_hx",
+        "spot/fr_hy",
+        "spot/fr_kn",
+    ]

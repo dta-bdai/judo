@@ -2,11 +2,14 @@
 
 """MuJoCo rollout backend with locomotion policy support."""
 
+from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
 from mujoco import MjModel
 
+import mujoco_extensions.closed_loop_rollout as clr
+from judo.tasks.spot.closed_loop_features import build_spot_closed_loop_features
 from judo.tasks.spot.spot_constants import DEFAULT_SPOT_ROLLOUT_CUTOFF_TIME
 from judo.utils.rollout_backend import RolloutBackend
 
@@ -37,22 +40,22 @@ class PolicyMJRolloutBackend(RolloutBackend):
         self.model = model
         self.physics_substeps = physics_substeps
         self._policy_path = policy_path
+        self._thread_pool: clr.ThreadPool | None = None
 
         self._setup_mujoco_extensions(model, policy_path, num_threads)
 
     def _setup_mujoco_extensions(self, model: MjModel, policy_path: str | Path, num_threads: int) -> None:
         """Setup the mujoco_extensions C++ rollout backend with ONNX policy."""
-        try:
-            from mujoco_extensions.policy_rollout import create_systems_vector, threaded_rollout  # type: ignore  # noqa: PLC0415, I001
-        except ImportError as e:
-            raise ImportError("mujoco_extensions is required. Build with: pixi run build") from e
-
-        self._systems = create_systems_vector(
+        features = build_spot_closed_loop_features(model, policy_path)
+        self._systems = clr.create_systems_vector(
             model,
+            features,
             str(policy_path),
-            num_threads,
+            num_systems=num_threads,
+            physics_substeps=self.physics_substeps,
+            duration=timedelta(seconds=DEFAULT_SPOT_ROLLOUT_CUTOFF_TIME),
         )
-        self._threaded_rollout = threaded_rollout
+        self._thread_pool = clr.ThreadPool()
 
     def rollout(
         self,
@@ -84,15 +87,18 @@ class PolicyMJRolloutBackend(RolloutBackend):
         controls = np.asarray(controls, dtype=np.float64)
         last_policy_output = np.asarray(last_policy_output, dtype=np.float64)
 
-        states, sensors, policy_outputs = self._threaded_rollout(
+        if self._thread_pool is None:
+            self._thread_pool = clr.ThreadPool()
+
+        out_qpos, out_qvel, sensors, policy_outputs = clr.threaded_rollout(
             self._systems,
-            x0,
+            x0[:, : self.model.nq],
+            x0[:, self.model.nq :],
             controls,
             last_policy_output,
-            self.num_threads,
-            self.physics_substeps,
-            DEFAULT_SPOT_ROLLOUT_CUTOFF_TIME,
+            self._thread_pool,
         )
+        states = np.concatenate((out_qpos, out_qvel), axis=-1)
 
         return np.array(states), np.array(sensors), np.array(policy_outputs)
 

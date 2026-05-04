@@ -5,6 +5,30 @@
 
 namespace SystemClass {
 
+namespace {
+constexpr int kExpectedObservationSize = 84;
+constexpr int kExpectedCommandSize = 25;
+constexpr int kExpectedPolicyOutputSize = 12;
+
+void validatePolicySchema(OnnxInterface::Policy& policy, const VectorT& observation) {
+  if (observation.size() != kExpectedObservationSize) {
+    throw std::runtime_error("Unexpected observation buffer size; expected 84");
+  }
+  if (policy.input_size != observation.size()) {
+    throw std::runtime_error("Policy input size mismatch: expected 84-dimensional observation input");
+  }
+  if (policy.output_size != kExpectedPolicyOutputSize) {
+    throw std::runtime_error("Policy output size mismatch: expected 12-dimensional action output");
+  }
+  if (policy.getInputName() != "obs") {
+    throw std::runtime_error("Unexpected ONNX input name; expected 'obs'");
+  }
+  if (policy.getOutputName() != "actions") {
+    throw std::runtime_error("Unexpected ONNX output name; expected 'actions'");
+  }
+}
+}  // namespace
+
 // Constructor
 System::System(const std::string& model_filepath_, const std::string& policy_filepath_)
     : model_filepath(model_filepath_),
@@ -27,6 +51,9 @@ System::System(const std::string& model_filepath_, const std::string& policy_fil
 
   policy_input_.resize(policy.input_size);
   policy_output.resize(policy.output_size);
+  policy_input_.setZero();
+  policy_output.setZero();
+  validatePolicySchema(policy, observation);
 }
 
 System::System(const std::string& policy_filepath_, const mjModel* reference_model,
@@ -53,6 +80,9 @@ System::System(const std::string& policy_filepath_, const mjModel* reference_mod
   loadPolicy(policy_filepath, reference_session);
   policy_input_.resize(policy.input_size);
   policy_output.resize(policy.output_size);
+  policy_input_.setZero();
+  policy_output.setZero();
+  validatePolicySchema(policy, observation);
 }
 
 System::~System() {
@@ -83,12 +113,31 @@ void System::zeroOutVectors() {
 }
 
 void System::setStateIndices() {
-  int base_id = mj_name2id(model, mjOBJ_BODY, "body");                        // id of the base
-  base_qpos_start_idx = model->jnt_qposadr[model->body_jntadr[base_id]];      // base position address
-  base_qvel_start_idx = model->jnt_dofadr[model->body_jntadr[base_id]];       // base velocity address
-  int first_leg_id = mj_name2id(model, mjOBJ_BODY, "front_left_hip");         // id of the first leg
-  leg_qpos_start_idx = model->jnt_qposadr[model->body_jntadr[first_leg_id]];  // leg position address
-  leg_qvel_start_idx = model->jnt_dofadr[model->body_jntadr[first_leg_id]];   // leg velocity address
+  // Try Starfish-style namespaced names first, then fall back to the bare names
+  // used by Judo's XMLs. Throws if neither is found so we never silently index
+  // into garbage memory via mj_name2id returning -1.
+  auto resolveBody = [&](std::initializer_list<const char*> candidates) -> int {
+    for (const char* name : candidates) {
+      const int id = mj_name2id(model, mjOBJ_BODY, name);
+      if (id >= 0) {
+        return id;
+      }
+    }
+    std::string msg = "[FATAL] None of the expected Spot body names were found in the model:";
+    for (const char* name : candidates) {
+      msg += " '";
+      msg += name;
+      msg += "'";
+    }
+    throw std::runtime_error(msg);
+  };
+
+  const int base_id = resolveBody({"spot/torso", "torso", "body"});            // id of the torso
+  base_qpos_start_idx = model->jnt_qposadr[model->body_jntadr[base_id]];       // base position address
+  base_qvel_start_idx = model->jnt_dofadr[model->body_jntadr[base_id]];        // base velocity address
+  const int first_leg_id = resolveBody({"spot/front_left_hip", "front_left_hip"});  // id of the first leg
+  leg_qpos_start_idx = model->jnt_qposadr[model->body_jntadr[first_leg_id]];   // leg position address
+  leg_qvel_start_idx = model->jnt_dofadr[model->body_jntadr[first_leg_id]];    // leg velocity address
 }
 
 void System::loadPolicy(const std::string& policy_filepath_,
@@ -123,6 +172,10 @@ void System::initializeSystemIndices() {
 
 // Compute observation
 void System::setObservation(const VectorT& command) {
+  if (command.size() != kExpectedCommandSize) {
+    throw std::runtime_error("Command size mismatch: expected 25-dimensional locomotion command");
+  }
+
   VectorT torso_vel_command = command.segment(0, 3);
   VectorT arm_command = command.segment(3, 7);
   VectorT leg_command = command.segment(10, 12);
@@ -154,11 +207,9 @@ void System::setObservation(const VectorT& command) {
   mju_rotVecQuat(projected_gravity, projected_gravity, inv_base_quat);
 
   for (int i = 0; i < 19; i++) {
-    joint_pos_[i] = data->qpos[joint_pos_start_index + i] - default_joint_pos_[i];
+    joint_pos_[i] = data->qpos[joint_pos_start_index + i];
     joint_vel_[i] = data->qvel[joint_vel_start_index + i];
   }
-  joint_pos_ = mujoco_to_orbit * joint_pos_;
-  joint_vel_ = mujoco_to_orbit * joint_vel_;
 
   // Populate the observation vector
   for (int i = 0; i < 3; i++) {
@@ -213,6 +264,13 @@ void System::setObservation(const VectorT& command) {
 
 // evaluate neural network policy
 void System::policyInference() {
+  if (policy.input_size != observation.size()) {
+    throw std::runtime_error("Policy input size does not match observation size");
+  }
+  if (policy_output.size() != kExpectedPolicyOutputSize) {
+    throw std::runtime_error("Policy output size does not match expected leg action size (12)");
+  }
+
   // TODO(@bhung) Get most of these hard coded index values from another source
   // Convert observation to float and initialize torch_input
   for (int i = 0; i < this->policy.input_size; ++i) {
@@ -222,23 +280,10 @@ void System::policyInference() {
   OnnxInterface::VectorT policy_output_float_ = this->policy.policyInference(&policy_input_float_);
   this->policy_output = policy_output_float_.cast<double>();
 
-  // legs (output by the neural net)
-  control_.segment(0, 12) = 0.2 * policy_output;
-  control_.segment(0, 12) = orbit_to_mujoco_legs * control_.segment(0, 12);
-  control_.segment(0, 12) = default_joint_pos_.segment(0, 12) + control_.segment(0, 12);
+  // legs (output by the neural net; includes any leg override in policy output)
+  control_.segment(0, 12) = policy_output;
   // arm (read neural net input i.e. from observation)
   control_.segment(12, 7) = observation.segment(3 + 3 + 3 + 3, 7);
-  // overwrite leg joint positions (read neural net input i.e. from observation)
-  VectorT leg_joint_command = observation.segment(3 + 3 + 3 + 3 + 7, 12);
-  if (leg_joint_command.segment(0, 3).norm() > 0) {  // FL
-    control_.segment(0, 3) = leg_joint_command.segment(0, 3);
-  } else if (leg_joint_command.segment(3, 3).norm() > 0) {  // FR
-    control_.segment(3, 3) = leg_joint_command.segment(3, 3);
-  } else if (leg_joint_command.segment(6, 3).norm() > 0) {  // HL
-    control_.segment(6, 3) = leg_joint_command.segment(6, 3);
-  } else if (leg_joint_command.segment(9, 3).norm() > 0) {  // HR
-    control_.segment(9, 3) = leg_joint_command.segment(9, 3);
-  }
 
   for (int i = 0; i < 19; i++) {
     data->ctrl[i] = control_[i];

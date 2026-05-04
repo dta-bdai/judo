@@ -2,23 +2,17 @@
 
 """MuJoCo Simulation with locomotion policy support."""
 
+from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
 from mujoco import mj_forward
 from omegaconf import DictConfig
 
+import mujoco_extensions.closed_loop_rollout as clr
 from judo.simulation.mj_simulation import MJSimulation
+from judo.tasks.spot.closed_loop_features import build_spot_closed_loop_features
 from judo.tasks.spot.spot_constants import DEFAULT_SPOT_ROLLOUT_CUTOFF_TIME, POLICY_OUTPUT_DIM
-
-try:
-    from mujoco_extensions.policy_rollout import create_systems_vector, threaded_rollout  # type: ignore
-except ImportError as e:
-    raise ImportError(
-        "mujoco_extensions is not built. Spot locomotion tasks require the C++ extension.\n"
-        "Build it with:  pixi run build\n"
-        "See README.md for details."
-    ) from e
 
 
 class PolicyMJSimulation(MJSimulation):
@@ -46,6 +40,7 @@ class PolicyMJSimulation(MJSimulation):
 
         self._systems = None
         self._last_policy_output = np.zeros(POLICY_OUTPUT_DIM)
+        self._thread_pool: clr.ThreadPool | None = None
 
         # Initialize C++ systems if task uses locomotion policy
         if self.task.locomotion_policy_path is not None:
@@ -57,11 +52,16 @@ class PolicyMJSimulation(MJSimulation):
         Args:
             policy_path: Path to the ONNX locomotion policy file.
         """
-        self._systems = create_systems_vector(
-            self.task.model,  # Pass the MjModel directly
+        features = build_spot_closed_loop_features(self.task.model, policy_path)
+        self._systems = clr.create_systems_vector(
+            self.task.model,
+            features,
             str(policy_path),
-            1,  # Single system for simulation
+            num_systems=1,
+            physics_substeps=self.task.physics_substeps,
+            duration=timedelta(seconds=DEFAULT_SPOT_ROLLOUT_CUTOFF_TIME),
         )
+        self._thread_pool = clr.ThreadPool()
 
     def step(self, command: np.ndarray) -> None:
         """Step the simulation forward.
@@ -97,25 +97,30 @@ class PolicyMJSimulation(MJSimulation):
         # states: (num_threads, nq+nv)
         # commands: (num_threads, num_timesteps, cmd_dim)
         # last_outputs: (num_threads, POLICY_OUTPUT_DIM)
-        states = np.array([state], dtype=np.float64)
+        qpos = np.array([state[: self.task.model.nq]], dtype=np.float64)
+        qvel = np.array([state[self.task.model.nq :]], dtype=np.float64)
         commands = np.array([[command]], dtype=np.float64)
         last_outputs = np.array([self._last_policy_output], dtype=np.float64)
 
         # Run rollout
         self.task.pre_sim_step()
-        out_states, out_sensors, policy_outputs = threaded_rollout(
+        if self._thread_pool is None:
+            self._thread_pool = clr.ThreadPool()
+        if self._systems is None:
+            raise RuntimeError("Closed-loop systems are not initialized")
+
+        out_qpos, out_qvel, out_sensors, policy_outputs = clr.threaded_rollout(
             self._systems,
-            states,
+            qpos,
+            qvel,
             commands,
             last_outputs,
-            1,  # num_threads
-            self.task.physics_substeps,
-            DEFAULT_SPOT_ROLLOUT_CUTOFF_TIME,
+            self._thread_pool,
         )
         self.task.post_sim_step()
 
         # Update simulation state from rollout result
-        final_state = np.array(out_states[0][-1])
+        final_state = np.concatenate((np.array(out_qpos[0][-1]), np.array(out_qvel[0][-1])))
         nq = self.task.model.nq
         self.task.data.qpos[:] = final_state[:nq]
         self.task.data.qvel[:] = final_state[nq:]

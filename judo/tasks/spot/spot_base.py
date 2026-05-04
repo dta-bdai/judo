@@ -77,11 +77,20 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
     Controls are a compact vector mapped to the 25-dim policy command:
     - Base only:                        [base_vel(3)]
     - Base + Arm:                       [base_vel(3), arm_cmd(7)]
-    - Base + Legs:                      [base_vel(3), front_leg_cmd(6), leg_selection(1)]
-    - Base + Arm + Legs:                [base_vel(3), arm_cmd(7), front_leg_cmd(6), leg_selection(1)]
+    - Base + Legs:                      [base_vel(3), front_leg_cmd(6)]
+    - Base + Arm + Legs:                [base_vel(3), arm_cmd(7), front_leg_cmd(6)]
     - With Torso:                       [..., torso_cmd(3)]  (appended to any of the above)
 
     The mapping to the 25-dim policy command is done in task_to_sim_ctrl.
+
+    When use_legs is enabled a scalar `leg_selection` is appended to the
+    compact controls. Like Starfish, this discretizes which front leg (if any)
+    is allowed to deviate from the standing pose during MPC sampling:
+      -1.0 .. -0.5 -> manipulate left leg (zero out right)
+      -0.5 ..  0.5 -> walk normally    (zero out both)
+       0.5 ..  1.0 -> manipulate right leg (zero out left)
+    Without this discretization MPC would sample non-zero positions into both
+    front legs simultaneously, which the locomotion policy is not trained for.
     """
 
     name: str = "spot_base"
@@ -233,8 +242,11 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
                 command_values.append(0.0)  # gripper selection
                 self.gripper_selection_index = len(command_values) - 1
         elif not self.use_arm and self.use_legs:  # Base and legs
-            command_values = [0, 0, 0, *LEGS_STANDING_POS[0:6], 0]
+            # Front-leg slots default to standing pose; the leg_selection bit
+            # below decides per-sample which (if any) front leg is active.
+            command_values = [0, 0, 0, *LEGS_STANDING_POS[0:6]]
             command_mask = BASE_VEL_CMD_INDS + FRONT_LEG_CMD_INDS
+            command_values.append(0.0)  # leg selection
             self.leg_selection_index = len(command_values) - 1
         else:  # Base, arm, and legs
             command_values = [0, 0, 0, *ARM_UNSTOWED_POS]
@@ -242,7 +254,8 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
             if self.use_gripper:
                 command_values.append(0.0)  # gripper selection
                 self.gripper_selection_index = len(command_values) - 1
-            command_values.extend([*LEGS_STANDING_POS[0:6], 0])
+            command_values.extend(LEGS_STANDING_POS[0:6])
+            command_values.append(0.0)  # leg selection
             self.leg_selection_index = len(command_values) - 1
 
         # Add torso if enabled
@@ -295,26 +308,27 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
             # Gripper is at index 9 in controls (base=3 + arm_joints=6 = 9)
             controls[mask_gripper, 9] = GRIPPER_CLOSED_POS
 
-        # Apply leg mask
+        # Apply leg mask (Starfish-style):
+        #   < -0.5 -> left active   (zero right block)
+        #   > +0.5 -> right active  (zero left block)
+        #   else   -> neither active (zero both blocks)
+        # The compact-control front-leg block is contiguous; locate it relative
+        # to the leg_selection_index (which sits immediately after the legs).
         if self.use_legs and self.leg_selection_index is not None:
             selection = controls[..., self.leg_selection_index]
             mask_fl = selection < -0.5
             mask_fr = selection > 0.5
             mask_neither = ~(mask_fl | mask_fr)
 
-            # Determine where leg commands start
-            leg_start_idx = 3  # after base
-            if self.use_arm:
-                leg_start_idx += 7  # arm commands
-                if self.use_gripper:
-                    leg_start_idx += 1  # gripper selection
+            legs_end = self.leg_selection_index  # exclusive
+            legs_start = legs_end - 6
+            fl_lo, fl_hi = legs_start, legs_start + 3
+            fr_lo, fr_hi = legs_start + 3, legs_end
+            controls[mask_fl, fr_lo:fr_hi] = 0.0
+            controls[mask_fr, fl_lo:fl_hi] = 0.0
+            controls[mask_neither, fl_lo:fr_hi] = 0.0
 
-            # Last 6 entries before leg selection are leg commands (FL: 3, FR: 3)
-            controls[mask_fl, leg_start_idx + 3 : leg_start_idx + 6] = 0.0  # Zero FR
-            controls[mask_fr, leg_start_idx : leg_start_idx + 3] = 0.0  # Zero FL
-            controls[mask_neither, leg_start_idx : leg_start_idx + 6] = 0.0  # Zero both
-
-        # Remove selection indices
+        # Remove selection indices from the compact controls.
         controls_full = np.delete(controls, selection_indices, axis=-1)
 
         if added_dim:
@@ -448,11 +462,13 @@ class SpotBase(Task[ConfigT], Generic[ConfigT]):
         action_components = ["spot/base.vx", "spot/base.vy", "spot/base.vtheta"]
         if self.use_arm:
             action_components.extend([f"spot/{joint}" for joint in ARM_JOINT_NAMES])
+            if self.use_gripper:
+                action_components.append("spot/gripper_selection")
         if self.use_legs:
-            # FR then FL ordering (matches starfish)
-            fr_joints = LEG_JOINT_NAMES_BOSDYN[3:6]  # fr_hx, fr_hy, fr_kn
+            # Front leg command block is FL then FR (indices 10:13, 13:16).
             fl_joints = LEG_JOINT_NAMES_BOSDYN[0:3]  # fl_hx, fl_hy, fl_kn
-            action_components.extend([f"spot/{joint}" for joint in fr_joints + fl_joints])
+            fr_joints = LEG_JOINT_NAMES_BOSDYN[3:6]  # fr_hx, fr_hy, fr_kn
+            action_components.extend([f"spot/{joint}" for joint in fl_joints + fr_joints])
             action_components.append("spot/leg_selection")
         if self.use_torso:
             action_components.extend(["spot/torso.roll", "spot/torso.pitch", "spot/torso.height"])
